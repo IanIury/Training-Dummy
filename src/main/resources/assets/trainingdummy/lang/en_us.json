@@ -1,0 +1,10 @@
+{
+  "itemGroup.trainingdummy": "Training Dummy",
+  "block.trainingdummy.example_block": "Training Dummy Observation",
+  "item.trainingdummy.dummy_item_spawn": "Training Dummy Spawn",
+
+  "entity.trainingdummy.training_dummy" : "Training Dummy",
+
+  "entity.trainingdummy.training_dummy_old" : "Dummy old"
+
+}
