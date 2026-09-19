@@ -22,6 +22,6 @@ object ModCreativeModelTabs {
     }
 
     fun register(eventBus : IEventBus){
-        ModItems.REGISTRY.register(eventBus)
+        REGISTRY.register(eventBus)
     }
 }
