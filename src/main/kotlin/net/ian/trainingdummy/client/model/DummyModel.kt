@@ -239,87 +239,90 @@ class DummyModel(val root : ModelPart) : HumanoidModel<DummyEntity>(root.getChil
                 PartPose.offset(0.0f, -24.75f, 0.0f)
             )
 
+
+            //R
             val body_feathers = body.addOrReplaceChild(
                 "body_feathers",
                 CubeListBuilder.create().texOffs(2, 49)
-                    .addBox(-4.0f, -11.5f, -2.0f, 8.0f, 1.0f, 0.0f, CubeDeformation(0.0f))
-                    .texOffs(4, 49).addBox(-4.0f, -11.5f, 2.0f, 8.0f, 1.0f, 0.0f, CubeDeformation(0.0f))
-                    .texOffs(10, 49).addBox(-4.0f, 0.5f, -2.0f, 8.0f, 1.0f, 0.0f, CubeDeformation(0.0f))
-                    .texOffs(10, 49).addBox(-4.0f, 0.5f, 2.0f, 8.0f, 1.0f, 0.0f, CubeDeformation(0.0f)),
+                    .addBox(-4.0f, -11.5f, -2.01f, 8.0f, 1.0f, 0.01f, CubeDeformation(0.02f))
+                    .texOffs(4, 49).addBox(-4.0f, -11.5f, 2.01f, 8.0f, 1.0f, 0.01f, CubeDeformation(0.02f))
+                    .texOffs(10, 49).addBox(-4.0f, 0.5f, -2.01f, 8.0f, 1.0f, 0.01f, CubeDeformation(0.02f))
+                    .texOffs(10, 49).addBox(-4.0f, 0.5f, 2.01f, 8.0f, 1.0f, 0.01f, CubeDeformation(0.02f)),
                 PartPose.offset(0.0f, 11.0f, 0.0f)
             )
 
             val body_feather_r1 = body_feathers.addOrReplaceChild(
                 "body_feather_r1",
                 CubeListBuilder.create().texOffs(4, 49)
-                    .addBox(-4.0f, -11.5f, -2.0f, 8.0f, 1.0f, 0.0f, CubeDeformation(0.0f)),
-                PartPose.offsetAndRotation(0.0f, -3.7f, 6.4f, 0.6981f, 0.0f, 0.0f)
+                    .addBox(-4.0f, -11.5f, -2.0f, 8.0f, 1.0f, 0.01f, CubeDeformation(0.02f)),
+                PartPose.offsetAndRotation(0.0f, -3.7f, 6.41f, 0.6981f, 0.0f, 0.0f)
             )
 
             val body_feather_r2 = body_feathers.addOrReplaceChild(
                 "body_feather_r2",
                 CubeListBuilder.create().texOffs(9, 49)
-                    .addBox(-4.0f, -11.5f, -2.0f, 8.0f, 1.0f, 0.0f, CubeDeformation(0.0f)),
-                PartPose.offsetAndRotation(0.0f, 7.9f, 10.8f, 0.6981f, 0.0f, 0.0f)
+                    .addBox(-4.0f, -11.5f, -2.0f, 8.0f, 1.0f, 0.01f, CubeDeformation(0.02f)),
+                PartPose.offsetAndRotation(0.0f, 7.9f, 10.81f, 0.6981f, 0.0f, 0.0f)
             )
 
             val body_feather_r3 = body_feathers.addOrReplaceChild(
                 "body_feather_r3",
                 CubeListBuilder.create().texOffs(4, 49)
-                    .addBox(-4.0f, -11.5f, -2.0f, 8.0f, 1.0f, 0.0f, CubeDeformation(0.0f)),
-                PartPose.offsetAndRotation(0.0f, -0.7f, -2.9f, -0.6283f, 0.0f, 0.0f)
+                    .addBox(-4.0f, -11.5f, -2.0f, 8.0f, 1.0f, 0.01f, CubeDeformation(0.02f)),
+                PartPose.offsetAndRotation(0.0f, -0.7f, -2.91f, -0.6283f, 0.0f, 0.0f)
             )
 
             val body_feather_r4 = body_feathers.addOrReplaceChild(
                 "body_feather_r4",
                 CubeListBuilder.create().texOffs(6, 49)
-                    .addBox(-4.0f, -11.5f, -2.0f, 8.0f, 1.0f, 0.0f, CubeDeformation(0.0f)),
-                PartPose.offsetAndRotation(0.0f, 11.0f, -7.0f, -0.6283f, 0.0f, 0.0f)
+                    .addBox(-4.0f, -11.5f, -2.0f, 8.0f, 1.0f, 0.01f, CubeDeformation(0.02f)),
+                PartPose.offsetAndRotation(0.0f, 11.0f, -7.01f, -0.6283f, 0.0f, 0.0f)
             )
 
             val body_feather_r5 = body_feathers.addOrReplaceChild(
                 "body_feather_r5",
                 CubeListBuilder.create().texOffs(18, 49)
-                    .addBox(0.0f, -11.5f, -2.0f, 4.0f, 1.0f, 0.0f, CubeDeformation(0.0f))
-                    .texOffs(10, 49).addBox(0.0f, -23.5f, -2.0f, 4.0f, 1.0f, 0.0f, CubeDeformation(0.0f)),
-                PartPose.offsetAndRotation(-6.0f, 12.0f, -2.0f, 0.0f, -1.5708f, 0.0f)
+                    .addBox(0.0f, -11.5f, -2.0f, 4.0f, 1.0f, 0.01f, CubeDeformation(0.02f))
+                    .texOffs(10, 49).addBox(0.0f, -23.5f, -2.0f, 4.0f, 1.0f, 0.01f, CubeDeformation(0.02f)),
+                PartPose.offsetAndRotation(-6.01f, 12.0f, -2.0f, 0.0f, -1.5708f, 0.0f)
             )
 
             val body_feather_r6 = body_feathers.addOrReplaceChild(
                 "body_feather_r6",
                 CubeListBuilder.create().texOffs(13, 49)
-                    .addBox(0.0f, -11.5f, -2.0f, 4.0f, 1.0f, 0.0f, CubeDeformation(0.0f))
-                    .texOffs(8, 49).addBox(0.0f, -23.5f, -2.0f, 4.0f, 1.0f, 0.0f, CubeDeformation(0.0f)),
-                PartPose.offsetAndRotation(2.0f, 12.0f, -2.0f, 0.0f, -1.5708f, 0.0f)
+                    .addBox(0.0f, -11.5f, -2.0f, 4.0f, 1.0f, 0.01f, CubeDeformation(0.02f))
+                    .texOffs(8, 49).addBox(0.0f, -23.5f, -2.0f, 4.0f, 1.0f, 0.01f, CubeDeformation(0.02f)),
+                PartPose.offsetAndRotation(2.01f, 12.0f, -2.0f, 0.0f, -1.5708f, 0.0f)
             )
 
             val body_feather_r7 = body_feathers.addOrReplaceChild(
                 "body_feather_r7",
                 CubeListBuilder.create().texOffs(14, 49)
-                    .addBox(0.0f, -11.5f, -2.0f, 4.0f, 1.0f, 0.0f, CubeDeformation(0.0f)),
-                PartPose.offsetAndRotation(9.9f, 10.5f, -2.0f, 0.0f, -1.5708f, -0.7069f)
+                    .addBox(0.0f, -11.5f, -2.0f, 4.0f, 1.0f, 0.01f, CubeDeformation(0.02f)),
+                PartPose.offsetAndRotation(9.91f, 10.5f, -2.0f, 0.0f, -1.5708f, -0.7069f)
             )
 
             val body_feather_r8 = body_feathers.addOrReplaceChild(
                 "body_feather_r8",
                 CubeListBuilder.create().texOffs(10, 49)
-                    .addBox(0.0f, -11.5f, -2.0f, 4.0f, 1.0f, 0.0f, CubeDeformation(0.0f)),
-                PartPose.offsetAndRotation(1.6f, -1.2f, -2.0f, 0.0f, -1.5708f, -0.7069f)
+                    .addBox(0.0f, -11.5f, -2.0f, 4.0f, 1.0f, 0.01f, CubeDeformation(0.02f)),
+                PartPose.offsetAndRotation(1.61f, -1.2f, -2.0f, 0.0f, -1.5708f, -0.7069f)
             )
 
             val body_feather_r9 = body_feathers.addOrReplaceChild(
                 "body_feather_r9",
                 CubeListBuilder.create().texOffs(13, 49)
-                    .addBox(0.0f, -11.5f, -2.0f, 4.0f, 1.0f, 0.0f, CubeDeformation(0.0f)),
-                PartPose.offsetAndRotation(-12.9f, 7.8f, -2.0f, 0.0f, -1.5708f, 0.7069f)
+                    .addBox(0.0f, -11.5f, -2.0f, 4.0f, 1.0f, 0.01f, CubeDeformation(0.02f)),
+                PartPose.offsetAndRotation(-12.91f, 7.8f, -2.0f, 0.0f, -1.5708f, 0.7069f)
             )
 
             val body_feather_r10 = body_feathers.addOrReplaceChild(
                 "body_feather_r10",
                 CubeListBuilder.create().texOffs(10, 49)
-                    .addBox(0.0f, -11.5f, -2.0f, 4.0f, 1.0f, 0.0f, CubeDeformation(0.0f)),
-                PartPose.offsetAndRotation(-4.4f, -3.9f, -2.0f, 0.0f, -1.5708f, 0.7069f)
+                    .addBox(0.0f, -11.5f, -2.0f, 4.0f, 1.0f, 0.01f, CubeDeformation(0.02f)),
+                PartPose.offsetAndRotation(-4.41f, -3.9f, -2.0f, 0.0f, -1.5708f, 0.7069f)
             )
+            //
 
             val jacket = wobble_node.addOrReplaceChild(
                 "jacket",

@@ -1,6 +1,3 @@
 {
-  "parent": "minecraft:item/generated",
-  "textures": {
-    "layer0": "trainingdummy:item/dummy_item_spawn"
-  }
+  "parent": "minecraft:builtin/entity"
 }

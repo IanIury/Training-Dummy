@@ -28,7 +28,7 @@ class DummyItemInHandLayer(
     ) {
 
         poseStack.pushPose()
-        val dummyModel = this.parentModel as? DummyModel
+        val dummyModel = this.parentModel
         if (dummyModel != null) {
 
             val wobble = dummyModel.wobble_node

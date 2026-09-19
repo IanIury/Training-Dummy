@@ -3,7 +3,9 @@ package net.ian.trainingdummy
 import net.ian.trainingdummy.block.ModBlocks
 import net.ian.trainingdummy.client.ClientSetup
 import net.ian.trainingdummy.entity.ModEntities
+import net.ian.trainingdummy.init.ModDataComponents
 import net.ian.trainingdummy.init.ModDataSerializersRegistry
+import net.ian.trainingdummy.item.ModCreativeModelTabs
 import net.ian.trainingdummy.item.ModItems
 import net.ian.trainingdummy.server.ServerSetup
 import net.minecraft.client.Minecraft
@@ -41,13 +43,20 @@ object TrainingDummy {
         ModBlocks.REGISTRY.register(MOD_BUS)
         ModItems.REGISTRY.register(MOD_BUS)
         ModEntities.register(MOD_BUS)
+        ModDataComponents.register(MOD_BUS)
+        ModCreativeModelTabs.register(MOD_BUS)
 
         MOD_BUS.addListener(ModEntities::registerAttributes)
+
+
 
         val obj = runForDist(clientTarget = {
             //MOD_BUS.addListener(::onClientSetup)
 
             MOD_BUS.addListener(ClientSetup::onClientSetup)
+
+            MOD_BUS.addListener(ClientSetup::registerClientExtensions)
+
 
             Minecraft.getInstance()
         }, serverTarget = {
@@ -64,4 +73,6 @@ object TrainingDummy {
     fun onCommonSetup(event: FMLCommonSetupEvent) {
         LOGGER.log(Level.INFO, "Hello! This is working!")
     }
+
+
 }

@@ -37,7 +37,7 @@ class DummyCustomHeadLayer(
     ) {
         poseStack.pushPose()
         poseStack.translate(0.0, 1.5, 0.0)
-        val dummyModel = this.parentModel as? DummyModel
+        val dummyModel = this.parentModel
         if (dummyModel != null) {
             val wobble = dummyModel.wobble_node
             val wobbleXRot = wobble.xRot

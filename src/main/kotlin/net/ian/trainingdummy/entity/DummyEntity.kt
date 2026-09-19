@@ -6,7 +6,10 @@ import net.ian.trainingdummy.entity.animation.DummyMaceAnimationState
 import net.ian.trainingdummy.entity.part.DummyPartEntity
 import net.ian.trainingdummy.event.utils.DamageData
 import net.ian.trainingdummy.event.utils.ModDataSerializers
+import net.ian.trainingdummy.init.DummyData
+import net.ian.trainingdummy.init.ModDataComponents
 import net.ian.trainingdummy.item.ModItems
+import net.minecraft.core.NonNullList
 import net.minecraft.network.syncher.EntityDataAccessor
 import net.minecraft.network.syncher.EntityDataSerializers
 import net.minecraft.network.syncher.SynchedEntityData
@@ -106,12 +109,12 @@ open class DummyEntity(
         }
     }
 
-    override fun onAddedToLevel() {
+   /* override fun onAddedToLevel() {
         super.onAddedToLevel()
         if (level().isClientSide) {
             spawnAnimation.start(tickCount)
         }
-    }
+    }*/
 
     // ========================================================================
     // COMPORTAMENTO, MOVIMENTO E FÍSICA
@@ -188,36 +191,15 @@ open class DummyEntity(
         }
     }
 
-    /*
     override fun handleEntityEvent(id: Byte) {
         if (id.toInt() == 42) {
-            this.hitTick = this.tickCount
-            val attacker = this.lastDamageSource?.entity
+            spawnAnimation.start(tickCount)
 
-            if (attacker != null) {
-
-                if(attacker.weaponItem?.item is MaceItem){
-                   // maceAnimation=DummyAnimationMace(true,this.getDamageDataS().newDamage)
-                }
-
-                val dx = attacker.x - this.x
-                val dz = attacker.z - this.z
-                val attackAngle = Mth.atan2(dz, dx) * (180.0f / Math.PI.toFloat()) - 90.0f
-                val relativeAngle = Mth.wrapDegrees(attackAngle - this.yRot)
-                val rad = Math.toRadians(relativeAngle.toDouble())
-
-                this.hitPitchAngle = -Mth.cos(rad.toFloat())
-                this.hitRollAngle = Mth.sin(rad.toFloat())
-            } else {
-                this.hitPitchAngle = -1.0f
-                this.hitRollAngle = 0.0f
-            }
-            this.hitStrength = 1.2f
         } else {
             super.handleEntityEvent(id)
         }
     }
-    */
+
 
     override fun getHurtSound(damageSource: DamageSource): SoundEvent = SoundEvents.ARMOR_STAND_HIT
     override fun getDeathSound(): SoundEvent = SoundEvents.ARMOR_STAND_BREAK
@@ -281,10 +263,84 @@ open class DummyEntity(
     // INTERAÇÃO E EQUIPAMENTOS
     // ========================================================================
 
-    override fun getPickResult(): ItemStack? = ItemStack(ModItems.DUMMY_ITEM_SPAWN)
+    override fun getPickResult(): ItemStack? = createItemFromDummy()
+
+    fun createItemFromDummy(): ItemStack {
+        val itemStack = ItemStack(ModItems.DUMMY_ITEM_SPAWN)
+
+        val armor = NonNullList.withSize(4, ItemStack.EMPTY)
+        armor[0] = getItemBySlot(EquipmentSlot.FEET)
+        armor[1] = getItemBySlot(EquipmentSlot.LEGS)
+        armor[2] = getItemBySlot(EquipmentSlot.CHEST)
+        armor[3] = getItemBySlot(EquipmentSlot.HEAD)
+
+        val hands = NonNullList.withSize(2, ItemStack.EMPTY)
+        hands[0] = getItemBySlot(EquipmentSlot.MAINHAND)
+        hands[1] = getItemBySlot(EquipmentSlot.OFFHAND)
+
+        val data = DummyData(
+            armor = armor,
+            hands = hands
+        )
+
+        // Salva o componente dentro do ItemStack
+        itemStack.set(ModDataComponents.DUMMY_DATA.get(), data)
+
+        return itemStack
+    }
+
+    override fun mobInteract(player: Player, hand: InteractionHand): InteractionResult {
+        val heldItem = player.getItemInHand(hand)
+
+        // 1. Caso o jogador esteja segurando o item do Dummy (Troca todos os equipamentos)
+        if (heldItem.`is`(ModItems.DUMMY_ITEM_SPAWN)) {
+            if (!level().isClientSide) {
+                val data = heldItem.get(ModDataComponents.DUMMY_DATA.get()) ?: DummyData()
+
+                // Armazena os equipamentos atuais do Dummy da cena
+                val currentArmor = NonNullList.withSize(4, ItemStack.EMPTY).apply {
+                    this[0] = getItemBySlot(EquipmentSlot.FEET).copy()
+                    this[1] = getItemBySlot(EquipmentSlot.LEGS).copy()
+                    this[2] = getItemBySlot(EquipmentSlot.CHEST).copy()
+                    this[3] = getItemBySlot(EquipmentSlot.HEAD).copy()
+                }
+                val currentHands = NonNullList.withSize(2, ItemStack.EMPTY).apply {
+                    this[0] = getItemBySlot(EquipmentSlot.MAINHAND).copy()
+                    this[1] = getItemBySlot(EquipmentSlot.OFFHAND).copy()
+                }
+
+                // Aplica os equipamentos contidos no item na mão para o Dummy da cena
+                setItemSlot(EquipmentSlot.FEET, data.armor.getOrElse(0) { ItemStack.EMPTY }.copy())
+                setItemSlot(EquipmentSlot.LEGS, data.armor.getOrElse(1) { ItemStack.EMPTY }.copy())
+                setItemSlot(EquipmentSlot.CHEST, data.armor.getOrElse(2) { ItemStack.EMPTY }.copy())
+                setItemSlot(EquipmentSlot.HEAD, data.armor.getOrElse(3) { ItemStack.EMPTY }.copy())
+
+                setItemSlot(EquipmentSlot.MAINHAND, data.hands.getOrElse(0) { ItemStack.EMPTY }.copy())
+                setItemSlot(EquipmentSlot.OFFHAND, data.hands.getOrElse(1) { ItemStack.EMPTY }.copy())
+
+                // Grava os equipamentos antigos no item da mão
+                val newData = DummyData(armor = currentArmor, hands = currentHands)
+                heldItem.set(ModDataComponents.DUMMY_DATA.get(), newData)
+            }
+            return InteractionResult.sidedSuccess(level().isClientSide)
+        }
+
+        // 2. Retorna PASS para permitir que o uso de arcos, poções arremessáveis e comidas passe batido pelo Dummy
+        return InteractionResult.PASS
+    }
 
     override fun interactAt(player: Player, vec: Vec3, hand: InteractionHand): InteractionResult {
         val heldItem = player.getItemInHand(hand)
+
+        // Se estiver segurando outro Dummy, ignora a troca individual de partes e deixa para o mobInteract
+        if (heldItem.`is`(ModItems.DUMMY_ITEM_SPAWN)) {
+            return InteractionResult.PASS
+        }
+
+        // Se o item tiver uma ação de uso (ex: puxar arco, beber poção, comer, arremessar), não intercepta o clique!
+        if (!heldItem.isEmpty && (heldItem.getUseDuration(player) > 0 || heldItem.`is`(Items.SPLASH_POTION) || heldItem.`is`(Items.LINGERING_POTION))) {
+            return InteractionResult.PASS
+        }
 
         if (heldItem.`is`(Items.NAME_TAG)) return InteractionResult.PASS
         if (player.isSpectator) return InteractionResult.SUCCESS
@@ -329,7 +385,25 @@ open class DummyEntity(
     }
 
     fun interactBaseDummy(player: Player, hand: InteractionHand): InteractionResult {
+
+        dropDummyAsItem(player)
+
         return InteractionResult.PASS
+    }
+
+    fun dropDummyAsItem(player: Player) {
+        if (!level().isClientSide) {
+            // 1. Cria o ItemStack com todos os componentes/dados salvos
+            val dummyStack = createItemFromDummy()
+
+            // 2. Dá o item ao jogador ou dropa no chão
+            if (!player.inventory.add(dummyStack)) {
+                player.drop(dummyStack, false)
+            }
+
+            // 3. Remove a entidade sem matá-la
+            discard()
+        }
     }
 
     private fun swapItem(player: Player, slot: EquipmentSlot, playerStack: ItemStack, hand: InteractionHand): Boolean {
@@ -392,7 +466,7 @@ open class DummyEntity(
         val MACE_HIT_TRIGGER: EntityDataAccessor<Int> = SynchedEntityData.defineId(DummyEntity::class.java, EntityDataSerializers.INT)
 
         fun createAttributes(): AttributeSupplier.Builder {
-            return Mob.createMobAttributes()
+            return createMobAttributes()
                 .add(Attributes.MAX_HEALTH, 1000.0)
                 .add(Attributes.KNOCKBACK_RESISTANCE, 1.0)
                 .add(Attributes.STEP_HEIGHT, 0.0)

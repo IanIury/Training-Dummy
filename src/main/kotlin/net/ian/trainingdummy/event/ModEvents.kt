@@ -3,11 +3,17 @@ package net.ian.trainingdummy.event
 import net.ian.trainingdummy.TrainingDummy
 import net.ian.trainingdummy.entity.DummyEntity
 import net.ian.trainingdummy.event.utils.DamageData
+import net.ian.trainingdummy.item.ModItems
+import net.ian.trainingdummy.item.custom.DummyItemRenderer
+import net.minecraft.client.renderer.BlockEntityWithoutLevelRenderer
 import net.minecraft.util.Mth
+import net.minecraft.world.entity.player.Player
 import net.minecraft.world.item.MaceItem
 import net.neoforged.api.distmarker.Dist
 import net.neoforged.bus.api.SubscribeEvent
 import net.neoforged.fml.common.EventBusSubscriber
+import net.neoforged.neoforge.client.extensions.common.IClientItemExtensions
+import net.neoforged.neoforge.client.extensions.common.RegisterClientExtensionsEvent
 import net.neoforged.neoforge.common.damagesource.DamageContainer.Reduction
 import net.neoforged.neoforge.event.entity.living.LivingDamageEvent
 import net.neoforged.neoforge.event.entity.player.CriticalHitEvent
@@ -28,10 +34,13 @@ object ModEvents {
 
         //val player : Player = event.source.entity as? Player ?: return
         val vitima : DummyEntity = event.entity as? DummyEntity ?: return
+        vitima.damageDataOLD = vitima.damageData
 
-        vitima.damageDataOLD = vitima.damageData;
+        var damageData = DamageData()
 
-        val damaData = vitima.damageData.copy(
+        if(event.source.entity is Player){damageData = vitima.damageData}
+
+        val damaData = damageData.copy(
             newDamage = event.newDamage,
             originalDamage = event.originalDamage,
             blockedDamage = event.blockedDamage,
@@ -99,6 +108,5 @@ object ModEvents {
         }
         dummy.hitAnimation.trigger()
     }
-
 
 }

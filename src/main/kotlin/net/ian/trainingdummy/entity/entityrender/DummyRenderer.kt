@@ -65,7 +65,79 @@ class DummyRenderer(context: EntityRendererProvider.Context) : HumanoidMobRender
 
         super.render(entity, entityYaw, partialTicks, poseStack, buffer, packedLight)
 
-        renderFloatingWindow(entity, poseStack, buffer, packedLight)
+        renderFloatingWindowDefault(entity, poseStack, buffer, packedLight)
+    }
+
+    private fun renderFloatingWindowDefault(
+        entity: DummyEntity,
+        poseStack: PoseStack,
+        buffer: MultiBufferSource,
+        packedLight: Int
+    ) {
+        // Exibe a janela apenas se houver registro de dano recente
+        if (entity.displayTicks > 0) {
+
+            val damageData = entity.getDamageDataS()
+
+            val window = FloatingWindow.Builder()
+                .attachToEntityRotation(entity) // Trava a rotação na direção do Dummy (+180° ajustado)
+                .setOffset(1.0, 2.0, 0.0)
+                .setSize(
+                    24f,
+                    24f,
+                    autoScaleContent = true,
+                    autoFitWidth = true,
+                    autoFitHeight = true
+                ) // Posição no ombro/lado do Dummy
+                .setAlignment(WindowAlignment.CENTER) // Cresce para a direita e para baixo
+                .setPadding(1f)
+                .setBorder(WindowColor.Rainbow(speed = 1.0f), width = 0.5f)
+                .setBackground(WindowColor.Solid(0xDD000000))
+
+
+                var finaldamage = ""
+
+                if(damageData.isReductions()){
+                    window.addText("Raw Damage: §c%.1f".format(damageData.originalDamage))
+                        .addSeparator(color = WindowColor.Rainbow(speed = 1.0f), thickness = 0.5f, margin = 2f)
+                        .addText("Reductions", color = 0x0087F0.toInt())
+                }else{window.setPadding(3f);}
+
+                if(damageData.armor > 0.0f){window.addText("Armor: -§a%.1f".format(damageData.armor))}
+                if(damageData.enchantments > 0.0f){window.addText(" Enchantments: -§a%.1f".format(damageData.enchantments))}
+                if(damageData.mobEffects > 0.0f){window.addText("Effects: -§a%.1f".format(damageData.mobEffects))}
+                if(damageData.absorption > 0.0f){window.addText("Absorption: -§a%.1f".format(damageData.absorption))}
+                if(damageData.innateResistance > 0.0f){window.addText("Innate Resistance: -§a%.1f".format(damageData.absorption))}
+                if(damageData.invulnerability > 0.0f){window.addText("Invulnerability: -§a%.1f".format(damageData.invulnerability))}
+
+                if(damageData.isReductions()){
+                    window.addSeparator(color = WindowColor.Rainbow(speed = 1.0f), thickness = 0.5f, margin = 2f)
+                    finaldamage = "Final: %.1f".format(damageData.newDamage)
+                }else{finaldamage = "%.1f".format(damageData.newDamage)}
+
+
+
+
+                //window.addText("${if(damageData.isReductions()) "Final:" else ""}%.1f".format(damageData.newDamage) + "${if (damageData.isCriticalHit) {" §c ${damageData.damageMultiplier}x"} else {"§a"}} ")
+                if (damageData.isCriticalHit) {
+                    //window.addText(finaldamage+" x${damageData.damageMultiplier}",color = WindowColor.Gradient( 0xFFFFFF,0x781500, true))
+                    window.addText(
+                        "$finaldamage x${damageData.damageMultiplier}",
+                        color = WindowColor.AnimatedGradient(
+                            argbStart = 0xFF0000, // Cor inicial (Branco)
+                            argbEnd = 0xFFFFFF,   // Cor final (Vermelho)
+                            speed = 5.0f,          // Velocidade do deslocamento
+                            scale = 1.0f           // Densidade/Frequência das ondas no texto
+                        )
+                    )
+                }else{
+                    window.addText(finaldamage)
+                }
+
+
+
+            window.build().render(poseStack, buffer, packedLight)
+        }
     }
 
     private fun renderFloatingWindow(
@@ -82,11 +154,22 @@ class DummyRenderer(context: EntityRendererProvider.Context) : HumanoidMobRender
             val window = FloatingWindow.Builder()
                 .attachToEntityRotation(entity) // Trava a rotação na direção do Dummy (+180° ajustado)
                 .setOffset(1.0, 2.0, 0.0)
-                .setSize(32f,32f, autoScaleContent = true)// Posição no ombro/lado do Dummy
+                .setSize(16f,16f, autoScaleContent = true)// Posição no ombro/lado do Dummy
                 .setAlignment(WindowAlignment.CENTER) // Cresce para a direita e para baixo
-                .setPadding(3f)
-                .setBorder(WindowColor.Rainbow(speed = 1.5f), width = 0.5f)
+                .setPadding(1f)
+
+                .setBorder(WindowColor.Rainbow(speed = 1.0f), width = 0.5f)
                 .setBackground(WindowColor.Solid(0xDD000000))
+
+                .addText("Raw Damage: §c%.1f".format(damageData.originalDamage))
+                .addSeparator(color = WindowColor.Rainbow(speed = 1.0f), thickness = 0.5f, margin = 2f)
+                .addText("Reductions", color = 0x0087F0.toInt())
+
+
+                .addText("Armor: §a%.1f".format(damageData.armor))
+                .addSeparator(color = WindowColor.Rainbow(speed = 1.0f), thickness = 0.5f, margin = 2f)
+                .addText("Final: %.1f".format(damageData.newDamage) + "${if (damageData.isCriticalHit) {" §cCrit ${damageData.damageMultiplier}x"} else {"§a"}} ")
+
 
                 // Conteúdo
                 .addText("§lESTATÍSTICAS", color = 0xFFFFAA00.toInt())
@@ -102,6 +185,8 @@ class DummyRenderer(context: EntityRendererProvider.Context) : HumanoidMobRender
                 .addText("Innate: §a%.1f".format(damageData.innateResistance))
                 .addText("Invul: §a%.1f".format(damageData.invulnerability))
                 //.addText("Crítico: " + if (entity.lastCrit>0f) "§aSIM" else "§cNÃO")
+
+
                 .build()
 
             window.render(poseStack, buffer, packedLight)

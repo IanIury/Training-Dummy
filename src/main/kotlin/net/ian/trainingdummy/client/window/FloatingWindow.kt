@@ -20,6 +20,8 @@ class FloatingWindow private constructor(
     val fixedWidth: Float?,
     val fixedHeight: Float?,
     val autoScaleContent: Boolean,
+    val autoFitWidth: Boolean,
+    val autoFitHeight: Boolean,
     val alignment: WindowAlignment,
     val faceCamera: Boolean,
     val entityYaw: Float?,
@@ -61,9 +63,34 @@ class FloatingWindow private constructor(
         val rawContentWidth = elements.maxOfOrNull { it.getWidth() } ?: 0f
         val rawContentHeight = elements.sumOf { it.getHeight().toDouble() }.toFloat()
 
-        // Determina tamanho da janela
-        val totalWidth = fixedWidth ?: (rawContentWidth + (padding * 2))
-        val totalHeight = fixedHeight ?: (rawContentHeight + (padding * 2))
+        // As dimensões fixas são os limites máximos. Primeiro calculamos a
+        // escala e só então encaixamos a janela no conteúdo já escalado.
+        val maximumWidth = fixedWidth ?: (rawContentWidth + (padding * 2))
+        val maximumHeight = fixedHeight ?: (rawContentHeight + (padding * 2))
+        val maximumContentWidth = maximumWidth - (padding * 2)
+        val maximumContentHeight = maximumHeight - (padding * 2)
+        val widthScale = if (rawContentWidth > maximumContentWidth && rawContentWidth > 0f) {
+            maximumContentWidth / rawContentWidth
+        } else 1f
+        val heightScale = if (rawContentHeight > maximumContentHeight && rawContentHeight > 0f) {
+            maximumContentHeight / rawContentHeight
+        } else 1f
+        val contentScaleFactor = if (autoScaleContent && fixedWidth != null && fixedHeight != null) {
+            minOf(1f, widthScale, heightScale)
+        } else 1f
+
+        val contentWidthWithPadding = (rawContentWidth * contentScaleFactor) + (padding * 2)
+        val contentHeightWithPadding = (rawContentHeight * contentScaleFactor) + (padding * 2)
+        val totalWidth = when {
+            fixedWidth == null -> contentWidthWithPadding
+            autoFitWidth -> minOf(fixedWidth, contentWidthWithPadding)
+            else -> fixedWidth
+        }
+        val totalHeight = when {
+            fixedHeight == null -> contentHeightWithPadding
+            autoFitHeight -> minOf(fixedHeight, contentHeightWithPadding)
+            else -> fixedHeight
+        }
 
         // Canto X e Y dinâmicos baseados no ALINHAMENTO/PIVOT
         val x = -totalWidth * alignment.xRatio
@@ -88,18 +115,6 @@ class FloatingWindow private constructor(
         poseStack.translate(0.0, 0.0, -0.1)
 
         val availWidth = totalWidth - (padding * 2)
-        val availHeight = totalHeight - (padding * 2)
-
-        // Escala o conteúdo se a janela for de tamanho fixo (.setSize) e não couber
-        val contentScaleFactor = if (autoScaleContent && fixedWidth != null && fixedHeight != null &&
-            (rawContentWidth > availWidth || rawContentHeight > availHeight)) {
-            val scaleX = availWidth / rawContentWidth
-            val scaleY = availHeight / rawContentHeight
-            minOf(scaleX, scaleY)
-        } else {
-            1.0f
-        }
-
         poseStack.translate((x + padding).toDouble(), (y + padding).toDouble(), 0.0)
 
         if (contentScaleFactor != 1.0f) {
@@ -108,7 +123,16 @@ class FloatingWindow private constructor(
 
         var currentY = 0f
         for (element in elements) {
-            element.render(poseStack, buffer, 0f, currentY, packedLight)
+            // O conteúdo está no espaço já escalado; divide para que separadores
+            // preencham toda a largura interna mesmo com autoScaleContent ativo.
+            element.render(
+                poseStack,
+                buffer,
+                0f,
+                currentY,
+                availWidth / contentScaleFactor,
+                packedLight
+            )
             currentY += element.getHeight()
         }
 
@@ -145,6 +169,8 @@ class FloatingWindow private constructor(
         private var fixedWidth: Float? = null
         private var fixedHeight: Float? = null
         private var autoScaleContent = false
+        private var autoFitWidth = false
+        private var autoFitHeight = false
         private var alignment = WindowAlignment.TOP_LEFT
         private var faceCamera = true
         private var entityYaw: Float? = null
@@ -152,6 +178,7 @@ class FloatingWindow private constructor(
         private var offsetY = 1.3
         private var offsetZ = 0.0
 
+        /*
         fun addText(text: String, color: Int = 0xFFFFFFFF.toInt(), shadow: Boolean = false) = apply {
             elements.add(WindowElement.Text(Component.literal(text), color, shadow))
         }
@@ -159,15 +186,56 @@ class FloatingWindow private constructor(
         fun addText(component: Component, color: Int = 0xFFFFFFFF.toInt(), shadow: Boolean = false) = apply {
             elements.add(WindowElement.Text(component, color, shadow))
         }
+        */
+
+        fun addText(text: String, color: WindowColor, shadow: Boolean = false) = apply {
+            elements.add(WindowElement.Text(Component.literal(text), color, shadow))
+        }
+
+        fun addText(component: Component, color: WindowColor, shadow: Boolean = false) = apply {
+            elements.add(WindowElement.Text(component, color, shadow))
+        }
+
+        // Manutenção do suporte a ARGB Int legado (opcional)
+        fun addText(text: String, color: Int = 0xFFFFFFFF.toInt(), shadow: Boolean = false) = apply {
+            elements.add(WindowElement.Text(Component.literal(text), WindowColor.Solid(color.toLong() and 0xFFFFFFFFL), shadow))
+        }
+
+        fun addText(component: Component, color: Int = 0xFFFFFFFF.toInt(), shadow: Boolean = false) = apply {
+            elements.add(WindowElement.Text(component, WindowColor.Solid(color.toLong() and 0xFFFFFFFFL), shadow))
+        }
 
         fun addSpacer(height: Float) = apply {
             elements.add(WindowElement.Spacer(height))
         }
 
-        fun setSize(width: Float, height: Float, autoScaleContent: Boolean = true) = apply {
+        /** Adiciona uma linha horizontal que ocupa toda a largura interna da janela. */
+        fun addSeparator(
+            color: WindowColor = WindowColor.Solid(0xFF808080L),
+            thickness: Float = 1f,
+            margin: Float = 2f
+        ) = apply {
+            elements.add(WindowElement.Separator(color, thickness, margin))
+        }
+
+        /**
+         * Define a área máxima da janela.
+         *
+         * Com [autoFitWidth] ou [autoFitHeight] ativos, as dimensões informadas
+         * passam a ser limites máximos e não reservam espaço vazio.
+         */
+        fun setSize(
+            width: Float,
+            height: Float,
+            autoScaleContent: Boolean = true,
+            autoFitWidth: Boolean = false,
+            autoFitHeight: Boolean = false
+        ) = apply {
             this.fixedWidth = width
             this.fixedHeight = height
             this.autoScaleContent = autoScaleContent
+            this.autoFitWidth = autoFitWidth
+            this.autoFitHeight = autoFitHeight
         }
 
         /**
@@ -210,7 +278,7 @@ class FloatingWindow private constructor(
         fun build(): FloatingWindow {
             return FloatingWindow(
                 elements, padding, background, border, borderWidth, scale,
-                fixedWidth, fixedHeight, autoScaleContent, alignment,
+                fixedWidth, fixedHeight, autoScaleContent, autoFitWidth, autoFitHeight, alignment,
                 faceCamera, entityYaw, offsetX, offsetY, offsetZ
             )
         }

@@ -70,6 +70,14 @@ class DummyHumanoidArmorLayer<T : LivingEntity, M : HumanoidModel<T>, A : Humano
     override fun setPartVisibility(model: A, slot: EquipmentSlot) {
         model.setAllVisible(false)
 
+        model.rightArm.xScale = 1.0f
+        model.rightArm.yScale = 1.0f
+        model.rightArm.zScale = 1.0f
+
+        model.leftArm.xScale = 1.0f
+        model.leftArm.yScale = 1.0f
+        model.leftArm.zScale = 1.0f
+
         when (slot) {
             EquipmentSlot.HEAD -> {
                 model.head.visible = true
@@ -79,6 +87,16 @@ class DummyHumanoidArmorLayer<T : LivingEntity, M : HumanoidModel<T>, A : Humano
                 model.body.visible = true
                 model.rightArm.visible = true
                 model.leftArm.visible = true
+
+                // Aplica a micro-expansão nas ombreiras/mangas para sair de cima do peito
+                model.rightArm.xScale = 1.01f
+                model.rightArm.yScale = 1.01f
+                model.rightArm.zScale = 1.01f
+
+                model.leftArm.xScale = 1.01f
+                model.leftArm.yScale = 1.01f
+                model.leftArm.zScale = 1.01f
+
             }
             EquipmentSlot.LEGS, EquipmentSlot.FEET -> {
                 model.rightLeg.visible = true

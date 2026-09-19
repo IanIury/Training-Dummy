@@ -5,6 +5,8 @@
 
   "entity.trainingdummy.training_dummy" : "Training Dummy",
 
-  "entity.trainingdummy.training_dummy_old" : "Dummy old"
+  "entity.trainingdummy.training_dummy_old" : "Dummy old",
+
+  "creativetab.trainingdummy.training_dummy_tab" : "Training Dummy"
 
 }

@@ -19,8 +19,8 @@ object ModEntities {
     val DUMMY: DeferredHolder<EntityType<*>, EntityType<DummyEntity>> =
         ENTITIES.register("training_dummy") { ->
             EntityType.Builder.of(::DummyEntity, MobCategory.MISC)
-                .sized(0.6F, 2F) // Tamanho padrão do ArmorStand
-                .clientTrackingRange(10)
+                .sized(0.6F, 2.1F)
+                //.clientTrackingRange(10)
                 .build("training_dummy")
         }
 
