@@ -12,7 +12,7 @@ object ModItems {
     val REGISTRY = DeferredRegister.createItems(TrainingDummy.ID)
 
     val DUMMY_ITEM_SPAWN by REGISTRY.register("dummy_item_spawn") { ->
-        TrainingDummySpawnItem(Item.Properties().stacksTo(3))
+        TrainingDummySpawnItem(Item.Properties().stacksTo(1))
     }
 
 
