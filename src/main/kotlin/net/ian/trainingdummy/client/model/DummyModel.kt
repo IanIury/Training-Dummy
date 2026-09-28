@@ -4,6 +4,7 @@ import com.mojang.blaze3d.vertex.PoseStack
 import com.mojang.blaze3d.vertex.VertexConsumer
 import net.ian.trainingdummy.TrainingDummy
 import net.ian.trainingdummy.entity.DummyEntity
+import net.ian.trainingdummy.init.utils.ClientSkinUtils
 import net.minecraft.client.model.HumanoidModel
 import net.minecraft.client.model.geom.ModelLayerLocation
 import net.minecraft.client.model.geom.ModelPart
@@ -12,10 +13,13 @@ import net.minecraft.client.model.geom.builders.CubeDeformation
 import net.minecraft.client.model.geom.builders.CubeListBuilder
 import net.minecraft.client.model.geom.builders.LayerDefinition
 import net.minecraft.client.model.geom.builders.MeshDefinition
+import net.minecraft.client.renderer.MultiBufferSource
+import net.minecraft.client.renderer.RenderType
 import net.minecraft.resources.ResourceLocation
 import net.minecraft.util.Mth
 import net.minecraft.world.entity.EquipmentSlot
 import net.minecraft.world.item.MaceItem
+import org.joml.Matrix4f
 import kotlin.math.exp
 
 
@@ -54,6 +58,7 @@ class DummyModel(val root : ModelPart) : HumanoidModel<DummyEntity>(root.getChil
         hat.allParts.forEach { it.visible = headIsEmpty }
 
         //if(!entity.spawnAnimation.isStarted){entity.spawnAnimation.start(entity.tickCount)}
+
 
         entity.spawnAnimation.ifStarted { animation ->
             animation.updateTime(ageInTicks, 1.0f)
@@ -97,9 +102,9 @@ class DummyModel(val root : ModelPart) : HumanoidModel<DummyEntity>(root.getChil
                 val decay = 0.2f
                 val wave = (Mth.sin(timeInTicks * frequency) * exp((-timeInTicks * decay).toDouble())).toFloat()
 
-                val maxAngleRad = Math.toRadians(30.0).toFloat() * 1.5f//entity.hitStrength
+                val maxAngleRad = Math.toRadians(30.0).toFloat() * 1.5f //entity.hitStrength (fazer animaçoes difente de arcodo com a força do dano)
 
-                // Angulo alvo gerado pelo NOVO golpe
+                // Angulo alvo gerado pelo NOVO golpe //Verifica ser esta siconizando com multplayer
                 val targetXRot = state.hitPitch * wave * maxAngleRad
                 val targetZRot = state.hitRoll * wave * maxAngleRad
 
@@ -184,6 +189,7 @@ class DummyModel(val root : ModelPart) : HumanoidModel<DummyEntity>(root.getChil
         //super.renderToBuffer(poseStack, vertexConsumer, packedLight, packedOverlay, color)
         wobble_node.render(poseStack, vertexConsumer, packedLight, packedOverlay, color)
         base_plate.render(poseStack, vertexConsumer, packedLight, packedOverlay, color)
+
     }
 
     companion object {

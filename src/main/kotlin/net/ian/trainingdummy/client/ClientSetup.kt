@@ -1,16 +1,10 @@
 package net.ian.trainingdummy.client
 
 import net.ian.trainingdummy.TrainingDummy.LOGGER
-import net.ian.trainingdummy.client.model.DummyModel
 import net.ian.trainingdummy.item.ModItems
-import net.ian.trainingdummy.item.custom.DummyItemRenderer
-import net.minecraft.client.Minecraft
+import net.ian.trainingdummy.item.renderer.DummyItemRenderer
 import net.minecraft.client.renderer.BlockEntityWithoutLevelRenderer
-import net.neoforged.api.distmarker.Dist
-import net.neoforged.bus.api.SubscribeEvent
-import net.neoforged.fml.common.EventBusSubscriber
 import net.neoforged.fml.event.lifecycle.FMLClientSetupEvent
-import net.neoforged.neoforge.client.event.EntityRenderersEvent
 import net.neoforged.neoforge.client.extensions.common.IClientItemExtensions
 import net.neoforged.neoforge.client.extensions.common.RegisterClientExtensionsEvent
 import org.apache.logging.log4j.Level

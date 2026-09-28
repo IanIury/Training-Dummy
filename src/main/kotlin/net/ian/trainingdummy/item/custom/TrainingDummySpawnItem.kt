@@ -2,11 +2,12 @@ package net.ian.trainingdummy.item.custom
 
 import net.ian.trainingdummy.entity.DummyEntity
 import net.ian.trainingdummy.entity.ModEntities
-import net.ian.trainingdummy.init.DummyData
 import net.ian.trainingdummy.init.ModDataComponents
-import net.minecraft.core.BlockPos
 import net.minecraft.core.Direction
 import net.minecraft.core.NonNullList
+import net.minecraft.core.component.DataComponents
+import net.minecraft.nbt.NbtOps
+import net.minecraft.nbt.Tag
 import net.minecraft.server.level.ServerLevel
 import net.minecraft.sounds.SoundEvents
 import net.minecraft.sounds.SoundSource
@@ -17,18 +18,22 @@ import net.minecraft.world.entity.Entity
 import net.minecraft.world.entity.EquipmentSlot
 import net.minecraft.world.entity.LivingEntity
 import net.minecraft.world.entity.player.Player
-import net.minecraft.world.item.ArmorStandItem
 import net.minecraft.world.item.Item
 import net.minecraft.world.item.ItemStack
+import net.minecraft.world.item.component.ItemContainerContents
+import net.minecraft.world.item.component.ResolvableProfile
 import net.minecraft.world.item.context.BlockPlaceContext
 import net.minecraft.world.item.context.UseOnContext
-import net.minecraft.world.level.Level
 import net.minecraft.world.level.gameevent.GameEvent
 import net.minecraft.world.phys.Vec3
 
 class TrainingDummySpawnItem(properties: Properties) : Item(properties) {
 
-    private fun updateDummyEquipment(dummy: DummyEntity, stack: ItemStack) {
+
+
+
+    /*
+    private fun updateDummyEquipmentOLD(dummy: DummyEntity, stack: ItemStack) {
         val data = stack.get(ModDataComponents.DUMMY_DATA.get()) ?: DummyData()
 
         dummy.setItemSlot(EquipmentSlot.FEET, data.armor[0])
@@ -40,13 +45,15 @@ class TrainingDummySpawnItem(properties: Properties) : Item(properties) {
         dummy.setItemSlot(EquipmentSlot.OFFHAND, data.hands[1])
     }
 
+     */
+
     override fun interactLivingEntity(
         stack: ItemStack,
         player: Player,
         interactionTarget: LivingEntity,
         usedHand: InteractionHand
     ): InteractionResult {
-        // 1. Garante que o alvo é o DummyEntity
+
         if (interactionTarget is DummyEntity) {
 
             // No lado do cliente, apenas confirmamos a ação para rodar a animação da mão
@@ -54,10 +61,23 @@ class TrainingDummySpawnItem(properties: Properties) : Item(properties) {
                 return InteractionResult.SUCCESS
             }
 
-            // 2. Pega os dados atuais do Item na mão (se não houver componente, usa valores vazios padrão)
-            val dataInItem = stack.get(ModDataComponents.DUMMY_DATA.get()) ?: DummyData()
+            val profilePlayer : ResolvableProfile? = interactionTarget.profilePlayer
+            val itemsListDummy = NonNullList.withSize(interactionTarget.dummyInventory.slots, ItemStack.EMPTY)
+            for (i in 0 until interactionTarget.dummyInventory.slots) {
+                itemsListDummy[i] = interactionTarget.dummyInventory.getStackInSlot(i)
+            }
 
-            // 3. Salva os equipamentos ATUAIS do Dummy da entidade
+            interactionTarget.updateDummyEquipmentUsingAnItem(stack)
+            interactionTarget.profilePlayer = stack.get(DataComponents.PROFILE)
+
+            // Salva o inventário inteiro direto no ItemStack
+            stack.set(DataComponents.PROFILE,profilePlayer)
+            stack.set(DataComponents.CONTAINER, ItemContainerContents.fromItems(itemsListDummy))
+
+
+            /*
+
+            val dataInItem = stack.get(ModDataComponents.DUMMY_DATA.get()) ?: DummyData()
             val currentEntityArmor = NonNullList.withSize(4, ItemStack.EMPTY).apply {
                 this[0] = interactionTarget.getItemBySlot(EquipmentSlot.FEET).copy()
                 this[1] = interactionTarget.getItemBySlot(EquipmentSlot.LEGS).copy()
@@ -70,7 +90,6 @@ class TrainingDummySpawnItem(properties: Properties) : Item(properties) {
                 this[1] = interactionTarget.getItemBySlot(EquipmentSlot.OFFHAND).copy()
             }
 
-            // 4. Aplica os itens do Item para a Entidade Dummy
             interactionTarget.setItemSlot(EquipmentSlot.FEET, dataInItem.armor.getOrElse(0) { ItemStack.EMPTY }.copy())
             interactionTarget.setItemSlot(EquipmentSlot.LEGS, dataInItem.armor.getOrElse(1) { ItemStack.EMPTY }.copy())
             interactionTarget.setItemSlot(EquipmentSlot.CHEST, dataInItem.armor.getOrElse(2) { ItemStack.EMPTY }.copy())
@@ -79,7 +98,6 @@ class TrainingDummySpawnItem(properties: Properties) : Item(properties) {
             interactionTarget.setItemSlot(EquipmentSlot.MAINHAND, dataInItem.hands.getOrElse(0) { ItemStack.EMPTY }.copy())
             interactionTarget.setItemSlot(EquipmentSlot.OFFHAND, dataInItem.hands.getOrElse(1) { ItemStack.EMPTY }.copy())
 
-            // 5. Atualiza o NBT / DataComponent do Item na mão com o que estava na entidade
             val newDummyData = DummyData(
                 armor = currentEntityArmor,
                 hands = currentEntityHands,
@@ -87,7 +105,9 @@ class TrainingDummySpawnItem(properties: Properties) : Item(properties) {
 
             stack.set(ModDataComponents.DUMMY_DATA.get(), newDummyData)
 
-            // Toca um som de equipamento para dar feedback sonoro
+            */
+
+
             interactionTarget.playSound(
                 SoundEvents.ARMOR_EQUIP_GENERIC.value(),
                 1.0f,
@@ -127,7 +147,8 @@ class TrainingDummySpawnItem(properties: Properties) : Item(properties) {
                 val dummy = ModEntities.DUMMY.get().create(serverlevel)
                     ?: return InteractionResult.FAIL
 
-                updateDummyEquipment(dummy,itemstack)
+                dummy.updateDummyEquipmentUsingAnItem(itemstack)
+                dummy.applyCompoundTagsFromItem(itemstack)
 
                 // Coloca na posição do bloco
                 dummy.moveTo(
@@ -137,6 +158,7 @@ class TrainingDummySpawnItem(properties: Properties) : Item(properties) {
                     0.0f,
                     0.0f
                 )
+
                 // Mesma lógica de rotação do Armor Stand
                 val rotation =
                     Mth.floor(
@@ -147,11 +169,12 @@ class TrainingDummySpawnItem(properties: Properties) : Item(properties) {
                 dummy.yBodyRot = rotation
                 dummy.yHeadRot = rotation
 
+
                 // Adiciona no mundo
                 serverlevel.addFreshEntityWithPassengers(dummy)
                 level.broadcastEntityEvent(dummy,42)
 
-                // Som
+                // Som (talvez criar um?)
                 level.playSound(
                     null as Player?,
                     dummy.x,

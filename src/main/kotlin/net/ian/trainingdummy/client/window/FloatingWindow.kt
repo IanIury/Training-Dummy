@@ -6,6 +6,7 @@ import com.mojang.math.Axis
 import net.minecraft.client.Minecraft
 import net.minecraft.client.renderer.MultiBufferSource
 import net.minecraft.client.renderer.RenderType
+import net.minecraft.core.Direction
 import net.minecraft.network.chat.Component
 import net.minecraft.world.entity.Entity
 import org.joml.Matrix4f
@@ -257,6 +258,17 @@ class FloatingWindow private constructor(
         /**
          * Passa a entidade para alinhar com a rotação dela caso faceCamera seja false.
          */
+        fun attachToEntityRotation(direction: Direction) = apply {
+            this.entityYaw = when(direction){
+                Direction.SOUTH -> 0.0f
+                Direction.NORTH -> 180.0f
+                Direction.EAST -> 90.0f
+                Direction.WEST -> 270.0f
+                else -> 0.0f
+            }
+            this.faceCamera = false
+        }
+
         fun attachToEntityRotation(entity: Entity) = apply {
             this.entityYaw = entity.yRot
             this.faceCamera = false

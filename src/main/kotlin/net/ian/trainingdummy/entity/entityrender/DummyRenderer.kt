@@ -2,9 +2,11 @@ package net.ian.trainingdummy.entity.entityrender
 
 
 import com.mojang.blaze3d.vertex.PoseStack
+import com.mojang.blaze3d.vertex.VertexConsumer
 import net.ian.trainingdummy.TrainingDummy
 import net.ian.trainingdummy.client.layer.DummyCustomHeadLayer
 import net.ian.trainingdummy.client.layer.DummyElytraLayer
+import net.ian.trainingdummy.client.layer.DummyFaceLayer
 import net.ian.trainingdummy.client.layer.DummyHumanoidArmorLayer
 import net.ian.trainingdummy.client.layer.DummyItemInHandLayer
 
@@ -15,15 +17,18 @@ import net.ian.trainingdummy.client.window.FloatingWindow
 import net.ian.trainingdummy.client.window.WindowAlignment
 import net.ian.trainingdummy.client.window.WindowColor
 import net.ian.trainingdummy.entity.DummyEntity
+import net.ian.trainingdummy.init.utils.ClientSkinUtils
 import net.minecraft.client.model.HumanoidModel
 import net.minecraft.client.model.geom.ModelLayers
 import net.minecraft.client.renderer.MultiBufferSource
+import net.minecraft.client.renderer.RenderType
 import net.minecraft.client.renderer.entity.EntityRendererProvider
 import net.minecraft.client.renderer.entity.HumanoidMobRenderer
 import net.minecraft.client.renderer.entity.layers.CustomHeadLayer
 import net.minecraft.client.renderer.entity.layers.ElytraLayer
 import net.minecraft.client.renderer.entity.layers.ItemInHandLayer
 import net.minecraft.resources.ResourceLocation
+import org.joml.Matrix4f
 
 
 class DummyRenderer(context: EntityRendererProvider.Context) : HumanoidMobRenderer<DummyEntity, DummyModel>(
@@ -45,6 +50,7 @@ class DummyRenderer(context: EntityRendererProvider.Context) : HumanoidMobRender
         this.addLayer(DummyItemInHandLayer(this,context.itemInHandRenderer))
         this.addLayer(DummyCustomHeadLayer(this, context.modelSet, context.itemInHandRenderer))
         this.addLayer(DummyElytraLayer(this,context.modelSet))
+        this.addLayer(DummyFaceLayer(this,context.modelSet))
 
         
     }
@@ -64,7 +70,7 @@ class DummyRenderer(context: EntityRendererProvider.Context) : HumanoidMobRender
     ) {
 
         super.render(entity, entityYaw, partialTicks, poseStack, buffer, packedLight)
-
+        //renderCARA(entity, entityYaw, partialTicks, poseStack, buffer, packedLight)
         renderFloatingWindowDefault(entity, poseStack, buffer, packedLight)
     }
 

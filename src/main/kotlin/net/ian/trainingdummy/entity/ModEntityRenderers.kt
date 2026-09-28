@@ -1,6 +1,9 @@
 package net.ian.trainingdummy.entity
 
 import net.ian.trainingdummy.TrainingDummy
+import net.ian.trainingdummy.block.ModBlockEntities
+import net.ian.trainingdummy.block.entityblock.DisplayDummyBlockEntity
+import net.ian.trainingdummy.block.renderes.DisplayDummyBlockEntityRenderer
 import net.ian.trainingdummy.client.model.DummyModel
 import net.ian.trainingdummy.entity.entityrender.DummyRenderer
 import net.neoforged.api.distmarker.Dist
@@ -14,6 +17,7 @@ object ModEntityRenderers {
     @SubscribeEvent
     fun registerRenderers(event: EntityRenderersEvent.RegisterRenderers) {
         event.registerEntityRenderer(ModEntities.DUMMY.get(),::DummyRenderer)
+        event.registerBlockEntityRenderer(ModBlockEntities.DISPLAY_DUMMY_BE,::DisplayDummyBlockEntityRenderer)
     }
 
     @SubscribeEvent

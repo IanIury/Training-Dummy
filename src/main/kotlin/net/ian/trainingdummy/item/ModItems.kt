@@ -2,9 +2,11 @@ package net.ian.trainingdummy.item
 
 import net.ian.trainingdummy.TrainingDummy
 import net.ian.trainingdummy.item.custom.TrainingDummySpawnItem
+import net.ian.trainingdummy.item.custom.TrainingModuleItem
 import net.minecraft.world.item.Item
 import net.neoforged.bus.api.IEventBus
 import net.neoforged.neoforge.registries.DeferredRegister
+import thedarkcolour.kotlinforforge.neoforge.forge.MOD_BUS
 import thedarkcolour.kotlinforforge.neoforge.forge.getValue
 
 object ModItems {
@@ -15,5 +17,12 @@ object ModItems {
         TrainingDummySpawnItem(Item.Properties().stacksTo(1))
     }
 
+    val TRAINING_MODULE_ITEM by REGISTRY.register("training_module_item") { ->
+        TrainingModuleItem(Item.Properties())
+    }
+
+    fun register(bus: IEventBus) {
+        REGISTRY.register(MOD_BUS)
+    }
 
 }

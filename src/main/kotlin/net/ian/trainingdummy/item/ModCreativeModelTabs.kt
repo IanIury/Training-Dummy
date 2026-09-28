@@ -1,9 +1,11 @@
 package net.ian.trainingdummy.item
 
 import net.ian.trainingdummy.TrainingDummy
+import net.ian.trainingdummy.block.ModBlocks
 import net.minecraft.core.registries.Registries
 import net.minecraft.network.chat.Component
 import net.minecraft.world.item.CreativeModeTab
+import net.minecraft.world.item.Item
 import net.minecraft.world.item.ItemStack
 import net.neoforged.bus.api.IEventBus
 import net.neoforged.neoforge.registries.DeferredRegister
@@ -18,6 +20,7 @@ object ModCreativeModelTabs {
             .title(Component.translatable("creativetab.trainingdummy.training_dummy_tab"))
             .displayItems { parameters, output ->
                 output.accept { ModItems.DUMMY_ITEM_SPAWN }
+                output.accept(ModBlocks.DISPLAY_DUMMY_BLOCK)
             }.build()
     }
 

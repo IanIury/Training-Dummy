@@ -1,5 +1,6 @@
 package net.ian.trainingdummy.init
 
+/*
 import com.mojang.serialization.Codec
 import com.mojang.serialization.codecs.RecordCodecBuilder
 import net.minecraft.core.NonNullList
@@ -29,3 +30,4 @@ data class DummyData(
         }
     }
 }
+*/

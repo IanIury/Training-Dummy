@@ -1,7 +1,9 @@
 {
   "itemGroup.trainingdummy": "Training Dummy",
-  "block.trainingdummy.example_block": "Training Dummy Observation",
   "item.trainingdummy.dummy_item_spawn": "Training Dummy Spawn",
+
+  "block.trainingdummy.example_block": "Training Dummy Observation",
+  "block.trainingdummy.display_dummy": "Training Dummy Display",
 
   "entity.trainingdummy.training_dummy" : "Training Dummy",
 

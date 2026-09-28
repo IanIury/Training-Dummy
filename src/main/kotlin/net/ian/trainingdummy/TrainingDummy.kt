@@ -1,5 +1,6 @@
 package net.ian.trainingdummy
 
+import net.ian.trainingdummy.block.ModBlockEntities
 import net.ian.trainingdummy.block.ModBlocks
 import net.ian.trainingdummy.client.ClientSetup
 import net.ian.trainingdummy.entity.ModEntities
@@ -7,6 +8,7 @@ import net.ian.trainingdummy.init.ModDataComponents
 import net.ian.trainingdummy.init.ModDataSerializersRegistry
 import net.ian.trainingdummy.item.ModCreativeModelTabs
 import net.ian.trainingdummy.item.ModItems
+import net.ian.trainingdummy.screen.ModMenuTypes
 import net.ian.trainingdummy.server.ServerSetup
 import net.minecraft.client.Minecraft
 import net.neoforged.bus.api.SubscribeEvent
@@ -40,11 +42,13 @@ object TrainingDummy {
         ModDataSerializersRegistry.register(MOD_BUS)
 
         // Register the KDeferredRegister to the mod-specific event bus
-        ModBlocks.REGISTRY.register(MOD_BUS)
-        ModItems.REGISTRY.register(MOD_BUS)
+        ModBlocks.register(MOD_BUS)
+        ModBlockEntities.register((MOD_BUS))
+        ModItems.register(MOD_BUS)
         ModEntities.register(MOD_BUS)
         ModDataComponents.register(MOD_BUS)
         ModCreativeModelTabs.register(MOD_BUS)
+        ModMenuTypes.register(MOD_BUS)
 
         MOD_BUS.addListener(ModEntities::registerAttributes)
 

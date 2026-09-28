@@ -1,0 +1,35 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "redstone",
+  "pattern": [
+    "#H#",
+    "COT",
+    "hBh"
+  ],
+  "key": {
+    "#": {
+      "item": "minecraft:light_weighted_pressure_plate"
+    },
+    "H": {
+      "item": "minecraft:heavy_weighted_pressure_plate"
+    },
+    "C": {
+      "item": "minecraft:comparator"
+    },
+    "O": {
+      "item": "minecraft:observer"
+    },
+    "T": {
+      "item": "minecraft:target"
+    },
+    "h": {
+      "item": "minecraft:hay_block"
+    },
+    "B": {
+      "tag": "minecraft:buttons"
+    }
+  },
+  "result": {
+    "id": "trainingdummy:training_module"
+  }
+}
