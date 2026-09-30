@@ -3,7 +3,10 @@ package net.ian.trainingdummy.item
 import net.ian.trainingdummy.TrainingDummy
 import net.ian.trainingdummy.item.custom.TrainingDummySpawnItem
 import net.ian.trainingdummy.item.custom.TrainingModuleItem
+import net.minecraft.core.component.DataComponents
+import net.minecraft.nbt.CompoundTag
 import net.minecraft.world.item.Item
+import net.minecraft.world.item.component.CustomData
 import net.neoforged.bus.api.IEventBus
 import net.neoforged.neoforge.registries.DeferredRegister
 import thedarkcolour.kotlinforforge.neoforge.forge.MOD_BUS

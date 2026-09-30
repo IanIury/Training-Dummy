@@ -28,13 +28,12 @@ object ModEvents {
 
         //val player : Player = event.source.entity as? Player ?: return
         val vitima : DummyEntity = event.entity as? DummyEntity ?: return
-        vitima.damageDataOLD = vitima.damageData
 
         var damageData = DamageData()
 
         if(event.source.entity is Player){damageData = vitima.damageData}
 
-        val damaData = damageData.copy(
+        val newDamaData = damageData.copy(
             newDamage = event.newDamage,
             originalDamage = event.originalDamage,
             blockedDamage = event.blockedDamage,
@@ -48,7 +47,8 @@ object ModEvents {
             innateResistance = event.getReduction(Reduction.INNATE_RESISTANCE)
         )
 
-        vitima.entityData.set(DummyEntity.DAMAGE_DATA,damaData)
+        //vitima.entityData.set(DummyEntity.DAMAGE_DATA,damaData)
+        vitima.onCustomDamageReceived(newDamaData)
 
         hitAnimation(event)
 
@@ -63,6 +63,7 @@ object ModEvents {
 
         //val player : Player = event.entity
         val vitima : DummyEntity = event.target as? DummyEntity ?: return
+        vitima.damageDataOld = vitima.damageData
 
         vitima.damageData = DamageData(
             damageMultiplier = event.damageMultiplier,

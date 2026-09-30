@@ -23,9 +23,6 @@ class DummyMenu(
     val dummy: DummyEntity?
 ) : AbstractContainerMenu(ModMenuTypes.DUMMY_MENU.get(), containerId) {
 
-    // Slot de Upgrade (1 slot separado)
-    val upgradeContainer: Container = SimpleContainer(1)
-
     // Construtor do lado do Cliente (invocado pelo pacote da rede)
     constructor(containerId: Int, playerInventory: Inventory, extraData: FriendlyByteBuf) : this(
         containerId,
@@ -42,8 +39,8 @@ class DummyMenu(
             }
             this.addSlot(SlotItemHandler(dummy.dummyInventory, 4, 115, 30))
 
-            this.addSlot(SlotItemHandler(dummy.dummyInventory, 5, 80, 70))
-            this.addSlot(SlotItemHandler(dummy.dummyInventory, 6, 98, 70))
+            this.addSlot(SlotItemHandler(dummy.dummyInventory, 5, 79, 62))
+            this.addSlot(SlotItemHandler(dummy.dummyInventory, 6, 97, 62))
 
         }else {
             // Fallback caso o Dummy seja nulo no cliente temporariamente
@@ -51,7 +48,9 @@ class DummyMenu(
             for (i in 0 until 4) {
                 this.addSlot(SlotItemHandler(dummyInventory, i, 8, 8 + i * 18))
             }
+
             this.addSlot(SlotItemHandler(dummyInventory, 4, 115, 30))
+
             this.addSlot(SlotItemHandler(dummyInventory, 5, 80, 80))
             this.addSlot(SlotItemHandler(dummyInventory, 6, 98, 80))
 
@@ -124,6 +123,6 @@ class DummyMenu(
     }
 
     fun hasUpgrade(): Boolean {
-        return !upgradeContainer.getItem(0).isEmpty
+        return dummy?.let { !it.dummyInventory.getStackInSlot(4).isEmpty } ?: false
     }
 }

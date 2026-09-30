@@ -82,7 +82,7 @@ class DisplayDummyBlockEntityRenderer(context: BlockEntityRendererProvider.Conte
             return
         }
 
-        val damageData = entity.getDamageDataS()
+        val damageData = entity.damageData
 
         val window = FloatingWindow.Builder()
             .setOffset(offsetX, offsetY, offsetZ)

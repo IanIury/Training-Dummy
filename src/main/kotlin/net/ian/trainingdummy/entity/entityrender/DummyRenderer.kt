@@ -16,8 +16,11 @@ import net.ian.trainingdummy.client.model.DummyModel
 import net.ian.trainingdummy.client.window.FloatingWindow
 import net.ian.trainingdummy.client.window.WindowAlignment
 import net.ian.trainingdummy.client.window.WindowColor
+import net.ian.trainingdummy.client.window.WindowColor.*
 import net.ian.trainingdummy.entity.DummyEntity
+import net.ian.trainingdummy.event.utils.DamageData
 import net.ian.trainingdummy.init.utils.ClientSkinUtils
+import net.ian.trainingdummy.item.custom.TrainingModuleItem
 import net.minecraft.client.model.HumanoidModel
 import net.minecraft.client.model.geom.ModelLayers
 import net.minecraft.client.renderer.MultiBufferSource
@@ -28,6 +31,7 @@ import net.minecraft.client.renderer.entity.layers.CustomHeadLayer
 import net.minecraft.client.renderer.entity.layers.ElytraLayer
 import net.minecraft.client.renderer.entity.layers.ItemInHandLayer
 import net.minecraft.resources.ResourceLocation
+import net.minecraft.world.item.ItemStack
 import org.joml.Matrix4f
 
 
@@ -71,80 +75,88 @@ class DummyRenderer(context: EntityRendererProvider.Context) : HumanoidMobRender
 
         super.render(entity, entityYaw, partialTicks, poseStack, buffer, packedLight)
         //renderCARA(entity, entityYaw, partialTicks, poseStack, buffer, packedLight)
-        renderFloatingWindowDefault(entity, poseStack, buffer, packedLight)
+        renderFloatingWindowModo(entity, poseStack, buffer, packedLight)
     }
 
-    private fun renderFloatingWindowDefault(
+
+    private fun renderFloatingWindowModo(
         entity: DummyEntity,
         poseStack: PoseStack,
         buffer: MultiBufferSource,
         packedLight: Int
+
     ) {
-        // Exibe a janela apenas se houver registro de dano recente
-        if (entity.displayTicks > 0) {
+        if(entity.displayTicks <= 0){return}
 
-            val damageData = entity.getDamageDataS()
+        val damageData = entity.damageData
+        val damageDataOld = entity.damageDataOld
 
-            val window = FloatingWindow.Builder()
-                .attachToEntityRotation(entity) // Trava a rotação na direção do Dummy (+180° ajustado)
-                .setOffset(1.0, 2.0, 0.0)
-                .setSize(
-                    24f,
-                    24f,
-                    autoScaleContent = true,
-                    autoFitWidth = true,
-                    autoFitHeight = true
-                ) // Posição no ombro/lado do Dummy
-                .setAlignment(WindowAlignment.CENTER) // Cresce para a direita e para baixo
-                .setPadding(1f)
-                .setBorder(WindowColor.Rainbow(speed = 1.0f), width = 0.5f)
-                .setBackground(WindowColor.Solid(0xDD000000))
+        val stack =  entity.dummyInventory.getStackInSlot(4) ?: ItemStack.EMPTY
+        val modoAtual = TrainingModuleItem.getItemMode(stack)
 
+        val window = FloatingWindow.Builder()
 
-                var finaldamage = ""
+        when(modoAtual){
 
-                if(damageData.isReductions()){
-                    window.addText("Raw Damage: §c%.1f".format(damageData.originalDamage))
-                        .addSeparator(color = WindowColor.Rainbow(speed = 1.0f), thickness = 0.5f, margin = 2f)
-                        .addText("Reductions", color = 0x0087F0.toInt())
-                }else{window.setPadding(3f);}
+            TrainingModuleItem.TrainingModos.DEFAULT -> {windowDefault(window,damageData, entity)}
+            TrainingModuleItem.TrainingModos.DPS -> {windowDefault(window,damageData, entity)}
+            TrainingModuleItem.TrainingModos.ACCUMULATED -> {windowDefault(window,damageData, entity)}
+            TrainingModuleItem.TrainingModos.COMPARISON -> {
+                windowDefault(window,damageData, entity)//coloca nome (current)
+                val window2 = FloatingWindow.Builder()
+                windowDefault(window2,damageDataOld, entity)
+                window2.setOffset(-1.0, 2.0, 0.0)
+                window2.build().render(poseStack, buffer, packedLight)//coloca nome (previous)
+            }
+        }
 
-                if(damageData.armor > 0.0f){window.addText("Armor: -§a%.1f".format(damageData.armor))}
-                if(damageData.enchantments > 0.0f){window.addText(" Enchantments: -§a%.1f".format(damageData.enchantments))}
-                if(damageData.mobEffects > 0.0f){window.addText("Effects: -§a%.1f".format(damageData.mobEffects))}
-                if(damageData.absorption > 0.0f){window.addText("Absorption: -§a%.1f".format(damageData.absorption))}
-                if(damageData.innateResistance > 0.0f){window.addText("Innate Resistance: -§a%.1f".format(damageData.absorption))}
-                if(damageData.invulnerability > 0.0f){window.addText("Invulnerability: -§a%.1f".format(damageData.invulnerability))}
+        window.build().render(poseStack, buffer, packedLight)
 
-                if(damageData.isReductions()){
-                    window.addSeparator(color = WindowColor.Rainbow(speed = 1.0f), thickness = 0.5f, margin = 2f)
-                    finaldamage = "Final: %.1f".format(damageData.newDamage)
-                }else{finaldamage = "%.1f".format(damageData.newDamage)}
+    }
 
+    private fun windowDefault(window: FloatingWindow.Builder,damageData: DamageData, entity: DummyEntity,){
+        window.attachToEntityRotation(entity)
+            .setOffset(1.0, 2.0, 0.0)
+            .setSize(24f, 24f, autoScaleContent = true, autoFitWidth = true, autoFitHeight = true)
+            .setAlignment(WindowAlignment.CENTER)
+            .setPadding(1f)
+            .setBorder(Rainbow(speed = 1.0f), width = 0.5f)
+            .setBackground(Solid(0xDD000000))
 
+        var finaldamage = ""
+        if(damageData.isReductions()){
+            window.addText("Raw Damage: §c%.1f".format(damageData.originalDamage))
+                .addSeparator(color = Rainbow(speed = 1.0f), thickness = 0.5f, margin = 2f)
+                .addText("Reductions", color = 0x0087F0.toInt())
+        }else{window.setPadding(3f);}
 
+        if(damageData.armor > 0.0f){window.addText("Armor: -§a%.1f".format(damageData.armor))}
+        if(damageData.enchantments > 0.0f){window.addText(" Enchantments: -§a%.1f".format(damageData.enchantments))}
+        if(damageData.mobEffects > 0.0f){window.addText("Effects: -§a%.1f".format(damageData.mobEffects))}
+        if(damageData.absorption > 0.0f){window.addText("Absorption: -§a%.1f".format(damageData.absorption))}
+        if(damageData.innateResistance > 0.0f){window.addText("Innate Resistance: -§a%.1f".format(damageData.absorption))}
+        if(damageData.invulnerability > 0.0f){window.addText("Invulnerability: -§a%.1f".format(damageData.invulnerability))}
 
-                //window.addText("${if(damageData.isReductions()) "Final:" else ""}%.1f".format(damageData.newDamage) + "${if (damageData.isCriticalHit) {" §c ${damageData.damageMultiplier}x"} else {"§a"}} ")
-                if (damageData.isCriticalHit) {
-                    //window.addText(finaldamage+" x${damageData.damageMultiplier}",color = WindowColor.Gradient( 0xFFFFFF,0x781500, true))
-                    window.addText(
-                        "$finaldamage x${damageData.damageMultiplier}",
-                        color = WindowColor.AnimatedGradient(
-                            argbStart = 0xFF0000, // Cor inicial (Branco)
-                            argbEnd = 0xFFFFFF,   // Cor final (Vermelho)
-                            speed = 5.0f,          // Velocidade do deslocamento
-                            scale = 1.0f           // Densidade/Frequência das ondas no texto
-                        )
-                    )
-                }else{
-                    window.addText(finaldamage)
-                }
+        if(damageData.isReductions()){
+            window.addSeparator(color = Rainbow(speed = 1.0f), thickness = 0.5f, margin = 2f)
+            finaldamage = "Final: %.1f".format(damageData.newDamage)
+        }else{finaldamage = "%.1f".format(damageData.newDamage)}
 
-
-
-            window.build().render(poseStack, buffer, packedLight)
+        if (damageData.isCriticalHit) {
+            window.addText(
+                "$finaldamage x${damageData.damageMultiplier}",
+                color = AnimatedGradient(
+                    argbStart = 0xFF0000, // Cor inicial (Branco)
+                    argbEnd = 0xFFFFFF,   // Cor final (Vermelho)
+                    speed = 5.0f,          // Velocidade do deslocamento
+                    scale = 1.0f           // Densidade/Frequência das ondas no texto
+                )
+            )
+        }else{
+            window.addText(finaldamage)
         }
     }
+
 
     private fun renderFloatingWindow(
         entity: DummyEntity,
@@ -155,7 +167,7 @@ class DummyRenderer(context: EntityRendererProvider.Context) : HumanoidMobRender
         // Exibe a janela apenas se houver registro de dano recente
         if (entity.displayTicks > 0) {
 
-            val damageData = entity.getDamageDataS()
+            val damageData = entity.damageData
 
             val window = FloatingWindow.Builder()
                 .attachToEntityRotation(entity) // Trava a rotação na direção do Dummy (+180° ajustado)

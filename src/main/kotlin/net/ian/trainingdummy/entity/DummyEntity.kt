@@ -1,6 +1,7 @@
 package net.ian.trainingdummy.entity
 
 import com.mojang.authlib.GameProfile
+import com.mojang.authlib.properties.PropertyMap
 import net.ian.trainingdummy.entity.animation.DummyHitAnimationState
 import net.ian.trainingdummy.entity.animation.DummyMaceAnimationState
 import net.ian.trainingdummy.entity.part.DummyPartEntity
@@ -9,11 +10,13 @@ import net.ian.trainingdummy.event.utils.ModDataSerializers
 import net.ian.trainingdummy.init.ModDataComponents
 import net.ian.trainingdummy.item.ModItems
 import net.ian.trainingdummy.item.custom.DisplayDummyBlockItem
+import net.ian.trainingdummy.item.custom.TrainingModuleItem
 import net.ian.trainingdummy.screen.custom.DummyMenu
 import net.minecraft.core.NonNullList
 import net.minecraft.core.component.DataComponents
 import net.minecraft.nbt.CompoundTag
 import net.minecraft.nbt.NbtOps
+import net.minecraft.nbt.Tag
 import net.minecraft.network.chat.Component
 import net.minecraft.network.syncher.EntityDataAccessor
 import net.minecraft.network.syncher.EntityDataSerializers
@@ -42,6 +45,7 @@ import net.minecraft.world.level.Level
 import net.minecraft.world.level.block.entity.SkullBlockEntity
 import net.minecraft.world.phys.Vec3
 import net.neoforged.neoforge.items.ItemStackHandler
+import java.util.Optional
 import kotlin.math.cos
 import kotlin.math.sin
 
@@ -53,6 +57,7 @@ open class DummyEntity(
     // ========================================================================
     // PARTES E SUB-ENTIDADES
     // ========================================================================
+
 
     val rightArmPart = DummyPartEntity(this, DummyPartEntity.Companion.DummyPartType.RightArm, 0.15f, 0.75f)
     val leftArmPart = DummyPartEntity(this, DummyPartEntity.Companion.DummyPartType.LeftArm, 0.15f, 0.75f)
@@ -68,8 +73,13 @@ open class DummyEntity(
     val maceAnimation = DummyMaceAnimationState(this)
     val spawnAnimation = AnimationState()
 
-    var damageDataOLD = DamageData()
-    var damageData = DamageData()
+    var damageDataOld : DamageData
+        get() = entityData.get(DAMAGE_DATA_OLD)
+        set(value) = entityData.set(DAMAGE_DATA_OLD, value)
+
+    var damageData: DamageData
+        get() = entityData.get(DAMAGE_DATA)
+        set(value) = entityData.set(DAMAGE_DATA, value)
 
     var displayTicks: Int
         get() = entityData.get(DISPLAY_TICKS)
@@ -90,6 +100,7 @@ open class DummyEntity(
         super.defineSynchedData(builder)
         builder.define(DISPLAY_TICKS, 0)
         builder.define(DAMAGE_DATA, DamageData())
+        builder.define(DAMAGE_DATA_OLD, DamageData())
         builder.define(MACE_DAMAGE, 0.0f)
         builder.define(MACE_HIT_TRIGGER, 0)
         builder.define(HIT_PITCH, 0.0f)
@@ -99,22 +110,7 @@ open class DummyEntity(
         builder.define(DUMMY_DATA, CompoundTag())
     }
 
-    // ========================================================================
-    // TICK & CICLO DE VIDA
-    // ========================================================================
 
-    override fun tick() {
-        super.tick()
-
-        updateArmPartPositions()
-
-        this.yBodyRot = this.yRot
-        this.yHeadRot = this.yRot
-
-        if (!level().isClientSide && displayTicks > 0) {
-            displayTicks--
-        }
-    }
 
     // ========================================================================
     // COMPORTAMENTO, MOVIMENTO E FÍSICA
@@ -144,7 +140,7 @@ open class DummyEntity(
                 return true
             }
 
-            this.displayTicks = 60
+            this.displayTicks = 160
             this.health = this.maxHealth
         }
         return wasHurt
@@ -174,6 +170,7 @@ open class DummyEntity(
                 }
             }
         }
+
     }
 
     override fun handleEntityEvent(id: Byte) {
@@ -273,6 +270,8 @@ open class DummyEntity(
         }
 
         override fun getSlotLimit(slot: Int): Int = if (slot == 5 || slot == 6) 64 else 1
+
+
     }
 
     override fun getPickResult(): ItemStack? = createItemFromDummy()
@@ -311,16 +310,10 @@ open class DummyEntity(
 
         // Salva o inventário inteiro direto no ItemStack
         itemStack.set(DataComponents.CONTAINER, ItemContainerContents.fromItems(itemsList))
-
+        itemStack.set(DataComponents.PROFILE,profilePlayer)
         itemStack.set(DataComponents.CUSTOM_NAME, this.customName)
 
         val dummyTag = entityData.get(DUMMY_DATA)
-        if (!dummyTag.isEmpty) {
-            CustomData.update(DataComponents.CUSTOM_DATA, itemStack) { tag ->
-                tag.merge(dummyTag)
-                tag.putString("custom_name", this.customName?.string ?: "")
-            }
-        }
 
         return itemStack
     }
@@ -359,24 +352,13 @@ open class DummyEntity(
 
     fun applyCompoundTagsFromItem(stack: ItemStack) {
 
-        val customData = stack.get(DataComponents.CUSTOM_DATA) ?: return
-        val newTag = customData.copyTag()
-        val currentTag = entityData.get(DUMMY_DATA)
+        stack.get(DataComponents.PROFILE)?.let { this.profilePlayer = it }
 
-        customName = stack.get(DataComponents.CUSTOM_NAME)
+        stack.get(DataComponents.CUSTOM_NAME)?.let {  super.customName = it }
 
-        // Só atualiza os synchedData se a NBT mudou (evita re-processar a skin no cache a cada frame)
-        if (currentTag != newTag) {
-            entityData.set(DUMMY_DATA, newTag)
-            customName = stack.get(DataComponents.CUSTOM_NAME)
-                /*
-                .string
-                .takeUnless { it.isNullOrBlank() }
-                ?.let { Component.literal(it) }
-
-                 */
-        }
     }
+
+    fun applyCustomName(name : Component?){ super.customName = name }
 
     // ========================================================================
     // INTERAÇÕES E EQUIPAMENTOS
@@ -503,13 +485,10 @@ open class DummyEntity(
         return InteractionResult.PASS
     }
 
+
     override fun setCustomName(name: Component?) {
         super.setCustomName(name)
-        if (name != null) {
-            setSkinByUsername(name.string)
-        } else {
-            this.profilePlayer = null
-        }
+        name?.also { setSkinByUsername(it.string) } ?: run {profilePlayer = null}
     }
 
     fun interactWithHandSlot(player: Player, hand: InteractionHand, slot: EquipmentSlot): InteractionResult {
@@ -589,26 +568,169 @@ open class DummyEntity(
     }
 
     // ========================================================================
+    // VARIÁVEIS DE CONTROLE DE MODO
+    // ========================================================================
+    private var timerModo: Int = 0          // Tempo do teste (ex: 100 ticks = 5s)
+    private var timerModoEspera: Int = 0    // Cooldown/Espera pós-teste (ex: 60 ticks = 3s)
+    private var aticveModo: Boolean = false
+    private var emEspera: Boolean = false   // Trava o inicio de um novo combo durante os 3s
+    private var accumulatedDamageInWindow: Float = 0f
+
+    //private var lastHitDamage: Float = 0f
+
+    fun onCustomDamageReceived(incomingData: DamageData) {
+        val modo = trainingModo
+        when (modo) {
+            TrainingModuleItem.TrainingModos.DEFAULT -> {
+                this.damageData = incomingData
+            }
+            TrainingModuleItem.TrainingModos.DPS -> {
+                if (emEspera) return
+
+                if (!aticveModo) {
+                    timerModo = 100
+                    aticveModo = true
+                    accumulatedDamageInWindow = incomingData.newDamage
+                } else {
+                    accumulatedDamageInWindow += incomingData.newDamage
+                }
+
+                val timePassedSeconds = ((100 - timerModo).coerceAtLeast(1)) / 20f
+                val currentDps = accumulatedDamageInWindow / timePassedSeconds
+
+                this.damageData = DamageData(originalDamage = currentDps, newDamage = currentDps)
+                //fazer o sistema para monstra a quatidade de hit detro desse tempo
+                //usar algum valor do damageData q nao esteja usado no dps, o evento dispara no ModEvent
+            }
+
+            TrainingModuleItem.TrainingModos.ACCUMULATED -> {
+                this.damageData = incomingData + damageDataOld
+            }
+
+            TrainingModuleItem.TrainingModos.COMPARISON -> {
+                //val diff = incomingData.newDamage - lastHitDamage
+                //lastHitDamage = incomingData.newDamage
+
+                this.damageData = incomingData//.copy(originalDamage = diff)
+            }
+        }
+    }
+
+    // ========================================================================
+    // TICK & CICLO DE VIDA
+    // ========================================================================
+
+    override fun tick() {
+        super.tick()
+
+        updateArmPartPositions()
+
+        this.yBodyRot = this.yRot
+        this.yHeadRot = this.yRot
+
+        if (!level().isClientSide) {
+            if (displayTicks > 0) {
+                displayTicks--
+            }
+
+            if (aticveModo) {
+                timerModo--
+                if (timerModo <= 0) {
+                    val finalDps = accumulatedDamageInWindow / 5.0f
+                    this.damageData = this.damageData.copy(newDamage = finalDps)
+
+                    aticveModo = false
+                    emEspera = true
+                    timerModoEspera = 60
+                }
+            }
+
+            else if (emEspera) {
+                timerModoEspera--
+                if (timerModoEspera <= 0) {
+                    emEspera = false
+                    accumulatedDamageInWindow = 0f
+                }
+            }
+        }
+    }
+
+    fun resetModoState() {
+        aticveModo = false
+        emEspera = false
+        timerModo = 0
+        timerModoEspera = 0
+        accumulatedDamageInWindow = 0f
+        //lastHitDamage = 0f
+        damageData = DamageData()
+    }
+
+    // ========================================================================
     // GETTERS & DATA ACCESSORS (PROFILE & NBT)
     // ========================================================================
 
-    fun getDamageDataS(): DamageData = entityData.get(DAMAGE_DATA)
+    lateinit var trainingModo : TrainingModuleItem.TrainingModos
 
-    var profilePlayer : ResolvableProfile? = null
 
+    var profilePlayer: ResolvableProfile?
+        get() {
+            val dummyTag = entityData.get(DUMMY_DATA)
+            if (!dummyTag.contains("ResolvableProfile")) return null
+            val profileTag = dummyTag.get("ResolvableProfile") ?: return null
+            return ResolvableProfile.CODEC
+                .parse(registryAccess().createSerializationContext(NbtOps.INSTANCE), profileTag)
+                .result()
+                .orElse(null)
+        }
+        set(value) {
+            val dummyTag = entityData.get(DUMMY_DATA).copy()
+            if (value != null) {
+                ResolvableProfile.CODEC
+                    .encodeStart(registryAccess().createSerializationContext(NbtOps.INSTANCE), value)
+                    .result()
+                    .ifPresent { tag ->
+                        dummyTag.put("ResolvableProfile", tag)
+                    }
+            } else {
+                dummyTag.remove("ResolvableProfile")
+            }
+            entityData.set(DUMMY_DATA, dummyTag)
+
+            if (value != null && !value.isResolved) {
+                value.resolve().thenAcceptAsync({ resolvedProfile ->
+                    // Ao resolver a skin na thread de fundo, atualiza para o perfil resolvido
+                    this.profilePlayer = resolvedProfile
+                }, net.minecraft.client.Minecraft.getInstance())
+            }
+        }
 
     fun setSkinByUsername(username: String?) {
 
         if (this.level().isClientSide) {return}
+
         if (username.isNullOrBlank()) {profilePlayer = null; return}
 
         if(profilePlayer?.name?.map { it.equals(username,true) }?.orElse(false) ?: false){return}
+
+        /*
+        val unresolvedProfile = ResolvableProfile(
+            Optional.of(username),
+            Optional.empty(),
+            PropertyMap()
+        )
+        unresolvedProfile.resolve().thenAcceptAsync({ resolvedProfile ->
+            if (resolvedProfile != null) {
+                this.profilePlayer = resolvedProfile
+            }
+        }, net.minecraft.Util.backgroundExecutor())
+        */
 
         SkullBlockEntity.fetchGameProfile(username).thenAccept { profileOpt ->
             profileOpt.ifPresent { profile ->
                 this.profilePlayer = ResolvableProfile(profile)
             }
         }
+
     }
 
     // ========================================================================
@@ -617,22 +739,31 @@ open class DummyEntity(
 
     override fun addAdditionalSaveData(compoundTag: CompoundTag) {
         super.addAdditionalSaveData(compoundTag)
-        compoundTag.put("DummyInventory", dummyInventory.serializeNBT(registryAccess()))
-        //compoundTag.merge(entityData.get(DUMMY_DATA))
+
+        compoundTag.remove("DummyInventory")
+        compoundTag.put("DummyInventory", dummyInventory.serializeNBT(level().registryAccess()))
+
+        compoundTag.merge(entityData.get(DUMMY_DATA))
     }
 
     override fun readAdditionalSaveData(compoundTag: CompoundTag) {
         super.readAdditionalSaveData(compoundTag)
 
         if (compoundTag.contains("DummyInventory")) {
-            dummyInventory.deserializeNBT(registryAccess(), compoundTag.getCompound("DummyInventory"))
+            dummyInventory.deserializeNBT(level().registryAccess(), compoundTag.getCompound("DummyInventory"))
             setItemSlot(EquipmentSlot.HEAD, dummyInventory.getStackInSlot(0))
             setItemSlot(EquipmentSlot.CHEST, dummyInventory.getStackInSlot(1))
             setItemSlot(EquipmentSlot.LEGS, dummyInventory.getStackInSlot(2))
             setItemSlot(EquipmentSlot.FEET, dummyInventory.getStackInSlot(3))
             setItemSlot(EquipmentSlot.MAINHAND, dummyInventory.getStackInSlot(5))
             setItemSlot(EquipmentSlot.OFFHAND, dummyInventory.getStackInSlot(6))
+
+            val stack =  dummyInventory.getStackInSlot(4) ?: ItemStack.EMPTY
+            trainingModo = TrainingModuleItem.getItemMode(stack)
+
+            compoundTag.remove("DummyInventory")
         }
+
 
         entityData.set(DUMMY_DATA, compoundTag.copy())
     }
@@ -646,8 +777,12 @@ open class DummyEntity(
         val DISPLAY_TICKS: EntityDataAccessor<Int> =
             SynchedEntityData.defineId(DummyEntity::class.java, EntityDataSerializers.INT)
 
-        val DAMAGE_DATA: EntityDataAccessor<DamageData> =
+        val DAMAGE_DATA : EntityDataAccessor<DamageData> =
             SynchedEntityData.defineId(DummyEntity::class.java, ModDataSerializers.DAMAGE_DATA)
+
+        val DAMAGE_DATA_OLD : EntityDataAccessor<DamageData> =
+            SynchedEntityData.defineId(DummyEntity::class.java, ModDataSerializers.DAMAGE_DATA)
+
 
         val HIT_PITCH: EntityDataAccessor<Float> = SynchedEntityData.defineId(DummyEntity::class.java, EntityDataSerializers.FLOAT)
         val HIT_ROLL: EntityDataAccessor<Float> = SynchedEntityData.defineId(DummyEntity::class.java, EntityDataSerializers.FLOAT)

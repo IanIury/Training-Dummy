@@ -1,0 +1,6 @@
+{
+  "parent" : "minecraft:block/generated",
+  "textures": {
+    "layer0": "trainingdummy:block/training_module_item_texture"
+  }
+}

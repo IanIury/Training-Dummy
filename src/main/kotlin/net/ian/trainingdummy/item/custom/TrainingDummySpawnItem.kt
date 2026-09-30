@@ -76,7 +76,6 @@ class TrainingDummySpawnItem(properties: Properties) : Item(properties) {
 
 
             /*
-
             val dataInItem = stack.get(ModDataComponents.DUMMY_DATA.get()) ?: DummyData()
             val currentEntityArmor = NonNullList.withSize(4, ItemStack.EMPTY).apply {
                 this[0] = interactionTarget.getItemBySlot(EquipmentSlot.FEET).copy()
@@ -104,7 +103,6 @@ class TrainingDummySpawnItem(properties: Properties) : Item(properties) {
             )
 
             stack.set(ModDataComponents.DUMMY_DATA.get(), newDummyData)
-
             */
 
 

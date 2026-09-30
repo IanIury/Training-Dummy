@@ -8,6 +8,7 @@ import net.ian.trainingdummy.init.ModDataComponents
 import net.ian.trainingdummy.init.ModDataSerializersRegistry
 import net.ian.trainingdummy.item.ModCreativeModelTabs
 import net.ian.trainingdummy.item.ModItems
+import net.ian.trainingdummy.network.ServerboundChangeModePayload
 import net.ian.trainingdummy.screen.ModMenuTypes
 import net.ian.trainingdummy.server.ServerSetup
 import net.minecraft.client.Minecraft
@@ -17,6 +18,7 @@ import net.neoforged.fml.common.Mod
 import net.neoforged.fml.event.lifecycle.FMLClientSetupEvent
 import net.neoforged.fml.event.lifecycle.FMLCommonSetupEvent
 import net.neoforged.fml.event.lifecycle.FMLDedicatedServerSetupEvent
+import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent
 import org.apache.logging.log4j.Level
 import org.apache.logging.log4j.LogManager
 import org.apache.logging.log4j.Logger
@@ -76,6 +78,17 @@ object TrainingDummy {
     @SubscribeEvent
     fun onCommonSetup(event: FMLCommonSetupEvent) {
         LOGGER.log(Level.INFO, "Hello! This is working!")
+    }
+
+    @SubscribeEvent
+    fun register(event: RegisterPayloadHandlersEvent) {
+        val registrar = event.registrar("1.0.0")
+
+        registrar.playToServer(
+            ServerboundChangeModePayload.TYPE,
+            ServerboundChangeModePayload.STREAM_CODEC,
+            ServerboundChangeModePayload::handle
+        )
     }
 
 

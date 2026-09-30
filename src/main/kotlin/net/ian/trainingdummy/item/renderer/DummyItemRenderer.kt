@@ -7,19 +7,26 @@ import net.ian.trainingdummy.entity.DummyEntity
 import net.ian.trainingdummy.entity.DummyEntity.Companion.DUMMY_DATA
 import net.ian.trainingdummy.entity.ModEntities
 import net.ian.trainingdummy.init.ModDataComponents
+import net.ian.trainingdummy.item.ModItems
 import net.ian.trainingdummy.item.custom.TrainingDummySpawnItem
 import net.minecraft.client.Minecraft
 import net.minecraft.client.renderer.BlockEntityWithoutLevelRenderer
 import net.minecraft.client.renderer.MultiBufferSource
+import net.minecraft.core.NonNullList
+import net.minecraft.core.component.DataComponents
 import net.minecraft.world.entity.EquipmentSlot
 import net.minecraft.world.item.ItemDisplayContext
 import net.minecraft.world.item.ItemStack
+import net.minecraft.world.item.component.ItemContainerContents
 
 class DummyItemRenderer : BlockEntityWithoutLevelRenderer(
     Minecraft.getInstance().blockEntityRenderDispatcher,
     Minecraft.getInstance().entityModels
 ) {
     private var dummyCache: DummyEntity? = null
+    private var isRendering: Boolean = false
+
+    //private var lastRenderedStack: ItemStack = ItemStack.EMPTY
 
     override fun renderByItem(
         stack: ItemStack,
@@ -31,24 +38,44 @@ class DummyItemRenderer : BlockEntityWithoutLevelRenderer(
     ) {
         val level = Minecraft.getInstance().level ?: return
 
-        // Instancia a entidade de teste/cache se não existir
-        if (dummyCache == null || dummyCache?.level() != level) {
-            dummyCache = DummyEntity(ModEntities.DUMMY.get(), level)
+        val dummyToRender = if(isRendering) {
+            DummyEntity(ModEntities.DUMMY.get(), level)
+        } else {
+            if (dummyCache == null || dummyCache?.level() != level) {
+                dummyCache = DummyEntity(ModEntities.DUMMY.get(), level)
+            }
+            dummyCache!!
+        }
+        val previousRenderingState = isRendering
+        isRendering = true
+
+        try {
+            val profileOnItem = stack.get(DataComponents.PROFILE)
+            if (dummyToRender.profilePlayer != profileOnItem) {
+                dummyToRender.profilePlayer = profileOnItem
+            }
+            applyEquipmentSafely(dummyToRender, stack)
+            poseStack.pushPose()
+
+            applyPoseStackTransforms(displayContext, poseStack)
+
+            val entityRenderDispatcher = Minecraft.getInstance().entityRenderDispatcher
+            entityRenderDispatcher.render(
+                dummyToRender,
+                0.0, 0.0, 0.0,
+                0.0f, 1.0f,
+                poseStack, buffer, packedLight
+            )
+
+            poseStack.popPose()
+
+        } finally {
+            isRendering = previousRenderingState
         }
 
-        val dummy = dummyCache ?: return
+    }
 
-        //Transfere os dados para a Entidade fictícia (A "entity item")
-        //updateDummyEquipment(dummy, stack)
-        //updateDummyCompountTags(dummy, stack)
-
-        dummy.updateDummyEquipmentUsingAnItem(stack)
-
-        dummy.applyCompoundTagsFromItem(stack)
-
-        //Ajusta Transformações da PoseStack dependendo de onde o item está renderizando
-        poseStack.pushPose()
-
+    private fun applyPoseStackTransforms(displayContext: ItemDisplayContext, poseStack: PoseStack) {
         when (displayContext) {
             ItemDisplayContext.GUI -> {
                 poseStack.translate(0.5, 0.05, 0.0)
@@ -76,60 +103,36 @@ class DummyItemRenderer : BlockEntityWithoutLevelRenderer(
                 poseStack.scale(0.4f, 0.4f, 0.4f)
             }
         }
-
-        //Renderiza a Entidade usando o seu EntityRenderDispatcher "oficial"
-        val entityRenderDispatcher = Minecraft.getInstance().entityRenderDispatcher
-        entityRenderDispatcher.render(
-            dummy,
-            0.0, 0.0, 0.0, // x, y, z locais na PoseStack
-            0.0f,          // Yaw
-            1.0f,          // PartialTicks
-            poseStack,
-            buffer,
-            packedLight
-        )
-
-        poseStack.popPose()
     }
 
-    private fun updateDummyCompountTags(dummy: DummyEntity,stack: ItemStack){
+    private fun applyEquipmentSafely(dummy: DummyEntity, stack: ItemStack) {
 
-        val dummyTag = dummy.entityData.get(DUMMY_DATA)
+        stack.get(DataComponents.PROFILE)?.let { if(dummy.profilePlayer != it) dummy.profilePlayer = it }
+        stack.get(DataComponents.CUSTOM_NAME)?.let { if(dummy.customName!=it) dummy.applyCustomName(it) }
 
-        if(dummyTag.isEmpty){return}
-        if(dummyTag.contains("rosto_ativo") && dummyTag.getBoolean("rosto_ativo")){
-            dummy.applyCompoundTagsFromItem(stack)
+        val containerContents = stack.getOrDefault(DataComponents.CONTAINER, ItemContainerContents.EMPTY)
+        val itemsList = NonNullList.withSize(dummy.dummyInventory.slots, ItemStack.EMPTY)
+        containerContents.copyInto(itemsList)
+
+        for (i in 0 until dummy.dummyInventory.slots) {
+            val originalItem = itemsList.getOrElse(i) { ItemStack.EMPTY }
+
+            if (originalItem.`is`(ModItems.DUMMY_ITEM_SPAWN)) {
+
+                val safeCopy = originalItem.copy()
+                safeCopy.remove(DataComponents.PROFILE)
+                dummy.dummyInventory.setStackInSlot(i, safeCopy)
+            } else {
+                dummy.dummyInventory.setStackInSlot(i, originalItem)
+            }
         }
 
-        /*if (!dummyTag.isEmpty) {
-            CustomData.update(DataComponents.CUSTOM_DATA, stack) { tag ->
-                if(!tag.contains("rosto_dummy_valuer")){
-                    dummy.applyCompoundTagsFromItem(stack)
-                    tag.putBoolean("rosto_Dummy",true)
-                }
-            }
-        }*/
+        dummy.setItemSlot(EquipmentSlot.HEAD, dummy.dummyInventory.getStackInSlot(0))
+        dummy.setItemSlot(EquipmentSlot.CHEST, dummy.dummyInventory.getStackInSlot(1))
+        dummy.setItemSlot(EquipmentSlot.LEGS, dummy.dummyInventory.getStackInSlot(2))
+        dummy.setItemSlot(EquipmentSlot.FEET, dummy.dummyInventory.getStackInSlot(3))
+        dummy.setItemSlot(EquipmentSlot.MAINHAND, dummy.dummyInventory.getStackInSlot(5))
+        dummy.setItemSlot(EquipmentSlot.OFFHAND, dummy.dummyInventory.getStackInSlot(6))
     }
 
-
-    /*
-    private fun updateDummyEquipment(dummy: DummyEntity, stack: ItemStack) {
-
-        // Limpa slots anteriores
-        EquipmentSlot.entries.forEach { slot -> dummy.setItemSlot(slot, ItemStack.EMPTY) }
-
-        // Leia as armaduras/itens salvos no CustomData / DataComponent do 'stack'
-
-        val armorContainer = stack.get(ModDataComponents.DUMMY_DATA) ?: return
-        dummy.setItemSlot(EquipmentSlot.FEET, armorContainer.armor[0])
-        dummy.setItemSlot(EquipmentSlot.LEGS, armorContainer.armor[1])
-        dummy.setItemSlot(EquipmentSlot.CHEST, armorContainer.armor[2])
-        dummy.setItemSlot(EquipmentSlot.HEAD, armorContainer.armor[3])
-
-        dummy.setItemSlot(EquipmentSlot.MAINHAND, armorContainer.hands[0])
-        dummy.setItemSlot(EquipmentSlot.OFFHAND, armorContainer.hands[1])
-
-    }
-
-     */
 }
