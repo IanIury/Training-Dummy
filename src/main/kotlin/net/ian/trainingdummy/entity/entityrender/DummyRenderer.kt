@@ -2,7 +2,6 @@ package net.ian.trainingdummy.entity.entityrender
 
 
 import com.mojang.blaze3d.vertex.PoseStack
-import com.mojang.blaze3d.vertex.VertexConsumer
 import net.ian.trainingdummy.TrainingDummy
 import net.ian.trainingdummy.client.layer.DummyCustomHeadLayer
 import net.ian.trainingdummy.client.layer.DummyElytraLayer
@@ -19,12 +18,11 @@ import net.ian.trainingdummy.client.window.WindowColor
 import net.ian.trainingdummy.client.window.WindowColor.*
 import net.ian.trainingdummy.entity.DummyEntity
 import net.ian.trainingdummy.event.utils.DamageData
-import net.ian.trainingdummy.init.utils.ClientSkinUtils
+import net.ian.trainingdummy.init.enums.TrainingModos
 import net.ian.trainingdummy.item.custom.TrainingModuleItem
 import net.minecraft.client.model.HumanoidModel
 import net.minecraft.client.model.geom.ModelLayers
 import net.minecraft.client.renderer.MultiBufferSource
-import net.minecraft.client.renderer.RenderType
 import net.minecraft.client.renderer.entity.EntityRendererProvider
 import net.minecraft.client.renderer.entity.HumanoidMobRenderer
 import net.minecraft.client.renderer.entity.layers.CustomHeadLayer
@@ -32,7 +30,6 @@ import net.minecraft.client.renderer.entity.layers.ElytraLayer
 import net.minecraft.client.renderer.entity.layers.ItemInHandLayer
 import net.minecraft.resources.ResourceLocation
 import net.minecraft.world.item.ItemStack
-import org.joml.Matrix4f
 
 
 class DummyRenderer(context: EntityRendererProvider.Context) : HumanoidMobRenderer<DummyEntity, DummyModel>(
@@ -56,7 +53,8 @@ class DummyRenderer(context: EntityRendererProvider.Context) : HumanoidMobRender
         this.addLayer(DummyElytraLayer(this,context.modelSet))
         this.addLayer(DummyFaceLayer(this,context.modelSet))
 
-        
+        //this.addLayer(DummyGlowLayer(this))
+        //this.addLayer(DummyOutlineLayer(this))
     }
 
     // Textura da entidade (.png em assets/modid/textures/entity/dummy.png)
@@ -72,8 +70,32 @@ class DummyRenderer(context: EntityRendererProvider.Context) : HumanoidMobRender
         buffer: MultiBufferSource,
         packedLight: Int
     ) {
-
         super.render(entity, entityYaw, partialTicks, poseStack, buffer, packedLight)
+
+        /*
+        poseStack.pushPose()
+        val scale = 1.02f
+        poseStack.scale(scale, scale, scale)
+
+        val glowTexture = getTextureLocation(entity)
+        val vertexConsumer: VertexConsumer = buffer.getBuffer(RenderType.eyes(glowTexture))
+
+        val r = 1.0f
+        val g = 0.2f
+        val b = 0.2f
+        val a = 1.0f
+
+        this.model.renderToBuffer(
+            poseStack,
+            vertexConsumer,
+            15728880, // Brilho total (Lightmap fullbright)
+            OverlayTexture.NO_OVERLAY,
+            FastColor.ARGB32.color((a * 255).toInt(), (r * 255).toInt(), (g * 255).toInt(), (b * 255).toInt())
+        )
+
+        poseStack.popPose()
+        */
+
         //renderCARA(entity, entityYaw, partialTicks, poseStack, buffer, packedLight)
         renderFloatingWindowModo(entity, poseStack, buffer, packedLight)
     }
@@ -98,14 +120,39 @@ class DummyRenderer(context: EntityRendererProvider.Context) : HumanoidMobRender
 
         when(modoAtual){
 
-            TrainingModuleItem.TrainingModos.DEFAULT -> {windowDefault(window,damageData, entity)}
-            TrainingModuleItem.TrainingModos.DPS -> {windowDefault(window,damageData, entity)}
-            TrainingModuleItem.TrainingModos.ACCUMULATED -> {windowDefault(window,damageData, entity)}
-            TrainingModuleItem.TrainingModos.COMPARISON -> {
+            TrainingModos.DEFAULT -> {windowDefault(window,damageData, entity)}
+            TrainingModos.DPS -> {
+
+                window.attachToEntityRotation(entity)
+                    .setOffset(0.6, 2.0, 0.0)
+                    .setSize(24f, 24f, autoScaleContent = true, autoFitWidth = true, autoFitHeight = true)
+                    .setAlignment(WindowAlignment.CENTER)
+                    .setPadding(1f)
+                    .setBorder(Rainbow(speed = 1.0f), width = 0.5f)
+                    .setBackground(Solid(0xDD000000))
+                    .addText("Damage Per Second")
+                    .addText(" • ${damageData.newDamage}")
+                    .addSeparator(color = Rainbow(speed = 1.0f), thickness = 0.5f, margin = 2f)
+                    .addText("Average Damage Per Hit")
+                    .addText(" • ${damageData.originalDamage}")
+
+            }
+            TrainingModos.ACCUMULATED -> {
+                window.attachToEntityRotation(entity)
+                    .setOffset(0.6, 2.0, 0.0)
+                    .setSize(24f, 24f, autoScaleContent = true, autoFitWidth = true, autoFitHeight = true)
+                    .setAlignment(WindowAlignment.CENTER)
+                    .setPadding(1f)
+                    .setBorder(Rainbow(speed = 1.0f), width = 0.5f)
+                    .setBackground(Solid(0xDD000000))
+
+
+            }
+            TrainingModos.COMPARISON -> {
                 windowDefault(window,damageData, entity)//coloca nome (current)
                 val window2 = FloatingWindow.Builder()
                 windowDefault(window2,damageDataOld, entity)
-                window2.setOffset(-1.0, 2.0, 0.0)
+                window2.setOffset(-0.6, 2.0, 0.0)
                 window2.build().render(poseStack, buffer, packedLight)//coloca nome (previous)
             }
         }
@@ -114,7 +161,8 @@ class DummyRenderer(context: EntityRendererProvider.Context) : HumanoidMobRender
 
     }
 
-    private fun windowDefault(window: FloatingWindow.Builder,damageData: DamageData, entity: DummyEntity,){
+    private fun windowConfigDefault(){}
+    private fun windowD(window: FloatingWindow.Builder,damageData: DamageData, entity: DummyEntity){
         window.attachToEntityRotation(entity)
             .setOffset(1.0, 2.0, 0.0)
             .setSize(24f, 24f, autoScaleContent = true, autoFitWidth = true, autoFitHeight = true)
@@ -124,6 +172,51 @@ class DummyRenderer(context: EntityRendererProvider.Context) : HumanoidMobRender
             .setBackground(Solid(0xDD000000))
 
         var finaldamage = ""
+
+        if(damageData.isReductions()){
+            window.addText("Raw Damage: §c%.1f".format(damageData.originalDamage))
+                .addSeparator(color = Rainbow(speed = 1.0f), thickness = 0.5f, margin = 2f)
+                .addText("Reductions", color = 0x0087F0.toInt())
+        }else{window.setPadding(3f);}
+
+        if(damageData.armor > 0.0f){window.addText("Armor: -§a%.1f".format(damageData.armor))}
+        if(damageData.enchantments > 0.0f){window.addText(" Enchantments: -§a%.1f".format(damageData.enchantments))}
+        if(damageData.mobEffects > 0.0f){window.addText("Effects: -§a%.1f".format(damageData.mobEffects))}
+        if(damageData.absorption > 0.0f){window.addText("Absorption: -§a%.1f".format(damageData.absorption))}
+        if(damageData.innateResistance > 0.0f){window.addText("Innate Resistance: -§a%.1f".format(damageData.absorption))}
+        if(damageData.invulnerability > 0.0f){window.addText("Invulnerability: -§a%.1f".format(damageData.invulnerability))}
+
+        if(damageData.isReductions()){
+            window.addSeparator(color = Rainbow(speed = 1.0f), thickness = 0.5f, margin = 2f)
+            finaldamage = "Final: %.1f".format(damageData.newDamage)
+        }else{finaldamage = "%.1f".format(damageData.newDamage)}
+
+        if (damageData.isCriticalHit) {
+            window.addText(
+                "$finaldamage x${damageData.damageMultiplier}",
+                color = AnimatedGradient(
+                    argbStart = 0xFF0000, // Cor inicial (Branco)
+                    argbEnd = 0xFFFFFF,   // Cor final (Vermelho)
+                    speed = 5.0f,          // Velocidade do deslocamento
+                    scale = 1.0f           // Densidade/Frequência das ondas no texto
+                )
+            )
+        }else{
+            window.addText(finaldamage)
+        }
+    }
+
+    private fun windowDefault(window: FloatingWindow.Builder,damageData: DamageData, entity: DummyEntity,){
+        window.attachToEntityRotation(entity)
+            .setOffset(0.6, 2.0, 0.0)
+            .setSize(24f, 24f, autoScaleContent = true, autoFitWidth = true, autoFitHeight = true)
+            .setAlignment(WindowAlignment.CENTER)
+            .setPadding(1f)
+            .setBorder(Rainbow(speed = 1.0f), width = 0.5f)
+            .setBackground(Solid(0xDD000000))
+
+        var finaldamage = ""
+
         if(damageData.isReductions()){
             window.addText("Raw Damage: §c%.1f".format(damageData.originalDamage))
                 .addSeparator(color = Rainbow(speed = 1.0f), thickness = 0.5f, margin = 2f)

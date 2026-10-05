@@ -4,8 +4,8 @@ import net.ian.trainingdummy.block.ModBlockEntities
 import net.ian.trainingdummy.block.ModBlocks
 import net.ian.trainingdummy.client.ClientSetup
 import net.ian.trainingdummy.entity.ModEntities
-import net.ian.trainingdummy.init.ModDataComponents
-import net.ian.trainingdummy.init.ModDataSerializersRegistry
+import net.ian.trainingdummy.init.components.ModDataComponents
+import net.ian.trainingdummy.init.serializers.ModDataSerializersRegistry
 import net.ian.trainingdummy.item.ModCreativeModelTabs
 import net.ian.trainingdummy.item.ModItems
 import net.ian.trainingdummy.network.ServerboundChangeModePayload
@@ -15,9 +15,7 @@ import net.minecraft.client.Minecraft
 import net.neoforged.bus.api.SubscribeEvent
 import net.neoforged.fml.common.EventBusSubscriber
 import net.neoforged.fml.common.Mod
-import net.neoforged.fml.event.lifecycle.FMLClientSetupEvent
 import net.neoforged.fml.event.lifecycle.FMLCommonSetupEvent
-import net.neoforged.fml.event.lifecycle.FMLDedicatedServerSetupEvent
 import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent
 import org.apache.logging.log4j.Level
 import org.apache.logging.log4j.LogManager

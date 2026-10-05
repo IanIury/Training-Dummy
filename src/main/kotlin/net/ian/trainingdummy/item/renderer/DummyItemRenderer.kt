@@ -2,13 +2,9 @@ package net.ian.trainingdummy.item.renderer
 
 import com.mojang.blaze3d.vertex.PoseStack
 import com.mojang.math.Axis
-import net.ian.trainingdummy.TrainingDummy
 import net.ian.trainingdummy.entity.DummyEntity
-import net.ian.trainingdummy.entity.DummyEntity.Companion.DUMMY_DATA
 import net.ian.trainingdummy.entity.ModEntities
-import net.ian.trainingdummy.init.ModDataComponents
 import net.ian.trainingdummy.item.ModItems
-import net.ian.trainingdummy.item.custom.TrainingDummySpawnItem
 import net.minecraft.client.Minecraft
 import net.minecraft.client.renderer.BlockEntityWithoutLevelRenderer
 import net.minecraft.client.renderer.MultiBufferSource
@@ -50,6 +46,7 @@ class DummyItemRenderer : BlockEntityWithoutLevelRenderer(
         isRendering = true
 
         try {
+
             val profileOnItem = stack.get(DataComponents.PROFILE)
             if (dummyToRender.profilePlayer != profileOnItem) {
                 dummyToRender.profilePlayer = profileOnItem

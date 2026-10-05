@@ -2,8 +2,8 @@ package net.ian.trainingdummy.screen.custom
 
 import com.mojang.blaze3d.systems.RenderSystem
 import net.ian.trainingdummy.TrainingDummy
+import net.ian.trainingdummy.init.enums.TrainingModos
 import net.ian.trainingdummy.item.custom.TrainingModuleItem
-import net.ian.trainingdummy.network.ServerboundChangeModePayload
 import net.minecraft.client.Minecraft
 import net.minecraft.client.gui.GuiGraphics
 import net.minecraft.client.gui.components.Button
@@ -13,8 +13,6 @@ import net.minecraft.network.chat.Component
 import net.minecraft.resources.ResourceLocation
 import net.minecraft.world.entity.player.Inventory
 import net.minecraft.world.item.ItemStack
-import net.neoforged.neoforge.network.PacketDistributor
-import java.util.function.Supplier
 
 class DummyScreen(
     menu: DummyMenu,
@@ -26,7 +24,7 @@ class DummyScreen(
 
     private lateinit var btnMode: Button
 
-    private var lastMode: TrainingModuleItem.TrainingModos? = null
+    private var lastMode: TrainingModos? = null
 
 
     override fun init() {
@@ -87,8 +85,8 @@ class DummyScreen(
                             val modoAtual = TrainingModuleItem.getItemMode(stack)
                             val newModo = if (isDireito) modoAtual.previous() else modoAtual.next()
 
-
-                            PacketDistributor.sendToServer(ServerboundChangeModePayload(newModo))
+                            menu.dummy?.trainingModo = newModo
+                            //PacketDistributor.sendToServer(ServerboundChangeModePayload(newModo))
 
                             this.message = Component.literal("Modo: ${newModo.nameD()}")
                             this.createNarration.createNarrationMessage { Component.literal(newModo.nameD()) }

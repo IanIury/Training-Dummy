@@ -1,51 +1,25 @@
 package net.ian.trainingdummy.item.custom
 
+import net.ian.trainingdummy.init.enums.TrainingModos
 import net.minecraft.core.component.DataComponents
-import net.minecraft.nbt.CompoundTag
 import net.minecraft.world.item.Item
-import net.minecraft.world.item.Item.Properties
 import net.minecraft.world.item.ItemStack
 import net.minecraft.world.item.component.CustomData
-import kotlin.rem
 
 class TrainingModuleItem (properties: Properties) : Item(properties) {
 
     init {
-        setItemMode(defaultInstance, TrainingModos.DEFAULT)
-    }
-
-    enum class TrainingModos {
-        DEFAULT, // SINGLE_HIT
-        DPS,
-        ACCUMULATED,
-        COMPARISON;
-
-        companion object {
-            fun fromString(name: String): TrainingModos {
-                return entries.firstOrNull { it.name.equals(name, ignoreCase = true) } ?: DEFAULT
-            }
-
-        }
-
-        fun next(): TrainingModos {
-            return entries[(this.ordinal + 1) % entries.size]
-        }
-
-        fun previous(): TrainingModos {
-            return entries[(this.ordinal - 1 + entries.size) % entries.size]
-        }
-
-        fun nameD(): String {return name.replace('_',' ').lowercase().replaceFirstChar { it.uppercase() }}
-
+        //setItemMode(defaultInstance, TrainingModos.DEFAULT)
     }
 
     companion object {
         const val MODE_KEY = "training_mode"
 
-        fun setItemMode(stack: ItemStack, mode: TrainingModos) {
+        fun setItemMode(stack: ItemStack, mode: TrainingModos) : ItemStack {
             CustomData.update(DataComponents.CUSTOM_DATA, stack) { tag ->
                 tag.putString(MODE_KEY, mode.name)
             }
+            return stack
         }
 
         fun getItemMode(stack: ItemStack): TrainingModos {

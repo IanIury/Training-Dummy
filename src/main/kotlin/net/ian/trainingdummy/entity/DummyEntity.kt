@@ -1,13 +1,11 @@
 package net.ian.trainingdummy.entity
 
-import com.mojang.authlib.GameProfile
-import com.mojang.authlib.properties.PropertyMap
 import net.ian.trainingdummy.entity.animation.DummyHitAnimationState
 import net.ian.trainingdummy.entity.animation.DummyMaceAnimationState
 import net.ian.trainingdummy.entity.part.DummyPartEntity
 import net.ian.trainingdummy.event.utils.DamageData
-import net.ian.trainingdummy.event.utils.ModDataSerializers
-import net.ian.trainingdummy.init.ModDataComponents
+import net.ian.trainingdummy.init.enums.TrainingModos
+import net.ian.trainingdummy.init.serializers.ModDataSerializers
 import net.ian.trainingdummy.item.ModItems
 import net.ian.trainingdummy.item.custom.DisplayDummyBlockItem
 import net.ian.trainingdummy.item.custom.TrainingModuleItem
@@ -16,7 +14,6 @@ import net.minecraft.core.NonNullList
 import net.minecraft.core.component.DataComponents
 import net.minecraft.nbt.CompoundTag
 import net.minecraft.nbt.NbtOps
-import net.minecraft.nbt.Tag
 import net.minecraft.network.chat.Component
 import net.minecraft.network.syncher.EntityDataAccessor
 import net.minecraft.network.syncher.EntityDataSerializers
@@ -25,7 +22,6 @@ import net.minecraft.server.level.ServerLevel
 import net.minecraft.server.level.ServerPlayer
 import net.minecraft.sounds.SoundEvent
 import net.minecraft.sounds.SoundEvents
-import net.minecraft.util.ExtraCodecs
 import net.minecraft.util.Mth
 import net.minecraft.world.InteractionHand
 import net.minecraft.world.InteractionResult
@@ -38,7 +34,6 @@ import net.minecraft.world.entity.ai.attributes.Attributes
 import net.minecraft.world.entity.player.Player
 import net.minecraft.world.item.ItemStack
 import net.minecraft.world.item.Items
-import net.minecraft.world.item.component.CustomData
 import net.minecraft.world.item.component.ItemContainerContents
 import net.minecraft.world.item.component.ResolvableProfile
 import net.minecraft.world.level.Level
@@ -81,6 +76,8 @@ open class DummyEntity(
         get() = entityData.get(DAMAGE_DATA)
         set(value) = entityData.set(DAMAGE_DATA, value)
 
+    var preDamageData: DamageData = DamageData()
+
     var displayTicks: Int
         get() = entityData.get(DISPLAY_TICKS)
         set(value) = entityData.set(DISPLAY_TICKS, value)
@@ -108,6 +105,7 @@ open class DummyEntity(
         builder.define(HIT_TRIGGER, 0)
 
         builder.define(DUMMY_DATA, CompoundTag())
+        builder.define(OPTIONAL_PROFILE, Optional.empty())
     }
 
 
@@ -167,6 +165,15 @@ open class DummyEntity(
                         maceAnimation.maceScaleSizeSmooth = true
                     }
                     maceAnimation.start(tickCount)
+                }
+                OPTIONAL_PROFILE -> {
+                    profilePlayer?.let {currentProfile ->
+                        if (!currentProfile.isResolved) {
+                            currentProfile.resolve().thenAcceptAsync({ resolved ->
+                                this.profilePlayer = resolved
+                            }, net.minecraft.client.Minecraft.getInstance())
+                        }
+                    }
                 }
             }
         }
@@ -570,44 +577,57 @@ open class DummyEntity(
     // ========================================================================
     // VARIÁVEIS DE CONTROLE DE MODO
     // ========================================================================
+
+
+    var trainingModo : TrainingModos
+        get() {val stack =  dummyInventory.getStackInSlot(4); return TrainingModuleItem.getItemMode(stack)}
+        set(value) {val stack =  dummyInventory.getStackInSlot(4); dummyInventory.setStackInSlot(4,TrainingModuleItem.setItemMode(stack,value))}
+        //get() = TrainingModuleItem.TrainingModos.fromString(entityData.get(MODO_TREINO))
+        //set(value) {entityData.set(MODO_TREINO,value.name)}
+
     private var timerModo: Int = 0          // Tempo do teste (ex: 100 ticks = 5s)
     private var timerModoEspera: Int = 0    // Cooldown/Espera pós-teste (ex: 60 ticks = 3s)
     private var aticveModo: Boolean = false
     private var emEspera: Boolean = false   // Trava o inicio de um novo combo durante os 3s
     private var accumulatedDamageInWindow: Float = 0f
+    private var totalHits: Int = 0
 
     //private var lastHitDamage: Float = 0f
 
     fun onCustomDamageReceived(incomingData: DamageData) {
         val modo = trainingModo
         when (modo) {
-            TrainingModuleItem.TrainingModos.DEFAULT -> {
+            TrainingModos.DEFAULT -> {
                 this.damageData = incomingData
             }
-            TrainingModuleItem.TrainingModos.DPS -> {
+            TrainingModos.DPS -> {
                 if (emEspera) return
 
                 if (!aticveModo) {
                     timerModo = 100
                     aticveModo = true
+                    totalHits = 1
                     accumulatedDamageInWindow = incomingData.newDamage
                 } else {
+                    totalHits++
                     accumulatedDamageInWindow += incomingData.newDamage
                 }
 
                 val timePassedSeconds = ((100 - timerModo).coerceAtLeast(1)) / 20f
                 val currentDps = accumulatedDamageInWindow / timePassedSeconds
+                val averageDamagePerHit = accumulatedDamageInWindow / totalHits
 
-                this.damageData = DamageData(originalDamage = currentDps, newDamage = currentDps)
-                //fazer o sistema para monstra a quatidade de hit detro desse tempo
-                //usar algum valor do damageData q nao esteja usado no dps, o evento dispara no ModEvent
+                this.damageData = incomingData.copy(
+                    newDamage = currentDps,
+                    originalDamage = averageDamagePerHit
+                )
             }
 
-            TrainingModuleItem.TrainingModos.ACCUMULATED -> {
+            TrainingModos.ACCUMULATED -> {
                 this.damageData = incomingData + damageDataOld
             }
 
-            TrainingModuleItem.TrainingModos.COMPARISON -> {
+            TrainingModos.COMPARISON -> {
                 //val diff = incomingData.newDamage - lastHitDamage
                 //lastHitDamage = incomingData.newDamage
 
@@ -663,15 +683,18 @@ open class DummyEntity(
         accumulatedDamageInWindow = 0f
         //lastHitDamage = 0f
         damageData = DamageData()
+        damageDataOld = DamageData()
     }
 
     // ========================================================================
     // GETTERS & DATA ACCESSORS (PROFILE & NBT)
     // ========================================================================
 
-    lateinit var trainingModo : TrainingModuleItem.TrainingModos
+    var profilePlayer: ResolvableProfile?
+        get() = entityData.get(OPTIONAL_PROFILE).orElse(null)
+        set(value) = entityData.set(OPTIONAL_PROFILE, Optional.ofNullable(value))
 
-
+    /*
     var profilePlayer: ResolvableProfile?
         get() {
             val dummyTag = entityData.get(DUMMY_DATA)
@@ -703,6 +726,8 @@ open class DummyEntity(
                 }, net.minecraft.client.Minecraft.getInstance())
             }
         }
+
+     */
 
     fun setSkinByUsername(username: String?) {
 
@@ -742,8 +767,16 @@ open class DummyEntity(
 
         compoundTag.remove("DummyInventory")
         compoundTag.put("DummyInventory", dummyInventory.serializeNBT(level().registryAccess()))
-
         compoundTag.merge(entityData.get(DUMMY_DATA))
+        // compoundTag.putString("trainingModo",trainingModo.name)
+        val registryContext = registryAccess().createSerializationContext(NbtOps.INSTANCE)
+
+        ResolvableProfile.CODEC.encodeStart(registryContext, this.profilePlayer)
+            .result()
+            .ifPresent { profileTag ->
+                compoundTag.put("ProfilePlayer", profileTag)
+            }
+
     }
 
     override fun readAdditionalSaveData(compoundTag: CompoundTag) {
@@ -758,14 +791,23 @@ open class DummyEntity(
             setItemSlot(EquipmentSlot.MAINHAND, dummyInventory.getStackInSlot(5))
             setItemSlot(EquipmentSlot.OFFHAND, dummyInventory.getStackInSlot(6))
 
-            val stack =  dummyInventory.getStackInSlot(4) ?: ItemStack.EMPTY
+            val stack =  dummyInventory.getStackInSlot(4)
             trainingModo = TrainingModuleItem.getItemMode(stack)
 
             compoundTag.remove("DummyInventory")
         }
-
-
+        //trainingModo = TrainingModuleItem.TrainingModos.fromString(compoundTag.getString("trainingModo"))
         entityData.set(DUMMY_DATA, compoundTag.copy())
+
+        val registryContext = registryAccess().createSerializationContext(NbtOps.INSTANCE)
+        if (compoundTag.contains("ProfilePlayer")) {
+            ResolvableProfile.CODEC.parse(registryContext, compoundTag.get("ProfilePlayer"))
+                .result()
+                .ifPresent { profile ->
+                    this.profilePlayer = profile
+                }
+        }
+
     }
 
     // ========================================================================
@@ -793,6 +835,12 @@ open class DummyEntity(
 
         val DUMMY_DATA: EntityDataAccessor<CompoundTag> =
             SynchedEntityData.defineId(DummyEntity::class.java, EntityDataSerializers.COMPOUND_TAG)
+
+        //val MODO_TREINO: EntityDataAccessor<String> = SynchedEntityData.defineId(DummyEntity::class.java, EntityDataSerializers.STRING)
+
+        val OPTIONAL_PROFILE: EntityDataAccessor<Optional<ResolvableProfile>> =
+            SynchedEntityData.defineId(DummyEntity::class.java, ModDataSerializers.OPTIONAL_RESOLVABLE_PROFILE)
+
 
         fun createAttributes(): AttributeSupplier.Builder {
             return createMobAttributes()

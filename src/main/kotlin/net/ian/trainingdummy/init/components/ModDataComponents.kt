@@ -1,4 +1,4 @@
-package net.ian.trainingdummy.init
+package net.ian.trainingdummy.init.components
 
 import net.ian.trainingdummy.TrainingDummy
 import net.minecraft.core.component.DataComponentType
@@ -11,6 +11,14 @@ object ModDataComponents {
 
     val COMPONENTS: DeferredRegister<DataComponentType<*>> = 
         DeferredRegister.create(Registries.DATA_COMPONENT_TYPE, TrainingDummy.ID)
+
+    val TRAINING_MODULE_CONFIG : DeferredHolder<DataComponentType<*>, DataComponentType<TrainingModuleConfig>> =
+        COMPONENTS.register("training_config") { ->
+            DataComponentType.builder<TrainingModuleConfig>()
+                .persistent(TrainingModuleConfig.CODEC)       // Permite salvar no disco/Item
+                .networkSynchronized(TrainingModuleConfig.STREAM_CODEC) // Permite enviar pela rede
+                .build()
+        }
 
     /*
     val DUMMY_DATA: DeferredHolder<DataComponentType<*>, DataComponentType<DummyData>> = 

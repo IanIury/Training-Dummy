@@ -31,7 +31,7 @@ object ModEvents {
 
         var damageData = DamageData()
 
-        if(event.source.entity is Player){damageData = vitima.damageData}
+        if(event.source.entity is Player){damageData = vitima.preDamageData}
 
         val newDamaData = damageData.copy(
             newDamage = event.newDamage,
@@ -65,7 +65,7 @@ object ModEvents {
         val vitima : DummyEntity = event.target as? DummyEntity ?: return
         vitima.damageDataOld = vitima.damageData
 
-        vitima.damageData = DamageData(
+        vitima.preDamageData = DamageData(
             damageMultiplier = event.damageMultiplier,
             vanillaMultiplier = event.vanillaMultiplier,
             isCriticalHit = event.isCriticalHit,

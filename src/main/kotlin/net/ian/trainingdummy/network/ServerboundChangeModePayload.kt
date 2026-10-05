@@ -1,19 +1,16 @@
 package net.ian.trainingdummy.network
 
-import net.ian.trainingdummy.TrainingDummy
+import net.ian.trainingdummy.init.enums.TrainingModos
 import net.ian.trainingdummy.item.custom.TrainingModuleItem
 import net.ian.trainingdummy.screen.custom.DummyMenu
-import net.minecraft.core.component.DataComponents
-import net.minecraft.nbt.CompoundTag
 import net.minecraft.network.FriendlyByteBuf
 import net.minecraft.network.codec.StreamCodec
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload
 import net.minecraft.resources.ResourceLocation
-import net.minecraft.world.item.component.CustomData
 import net.neoforged.neoforge.network.handling.IPayloadContext
 
 class ServerboundChangeModePayload(
-    val modo: TrainingModuleItem.TrainingModos
+    val modo: TrainingModos
 ) : CustomPacketPayload {
 
     companion object {
@@ -23,7 +20,7 @@ class ServerboundChangeModePayload(
 
         val STREAM_CODEC: StreamCodec<FriendlyByteBuf, ServerboundChangeModePayload> = CustomPacketPayload.codec(
             { payload, buf -> buf.writeEnum(payload.modo) },
-            { buf -> ServerboundChangeModePayload(buf.readEnum(TrainingModuleItem.TrainingModos::class.java)) }
+            { buf -> ServerboundChangeModePayload(buf.readEnum(TrainingModos::class.java)) }
         )
 
         fun handle(payload: ServerboundChangeModePayload, context: IPayloadContext) {
