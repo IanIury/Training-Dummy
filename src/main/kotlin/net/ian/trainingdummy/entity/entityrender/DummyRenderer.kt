@@ -13,9 +13,11 @@ import net.ian.trainingdummy.client.layer.DummyItemInHandLayer
 import net.ian.trainingdummy.client.model.DummyModel
 
 import net.ian.trainingdummy.client.window.FloatingWindow
+import net.ian.trainingdummy.client.window.FloatingWindow.*
 import net.ian.trainingdummy.client.window.WindowAlignment
 import net.ian.trainingdummy.client.window.WindowColor
 import net.ian.trainingdummy.client.window.WindowColor.*
+import net.ian.trainingdummy.client.window.WindowElement
 import net.ian.trainingdummy.entity.DummyEntity
 import net.ian.trainingdummy.event.utils.DamageData
 import net.ian.trainingdummy.init.enums.TrainingModos
@@ -28,8 +30,15 @@ import net.minecraft.client.renderer.entity.HumanoidMobRenderer
 import net.minecraft.client.renderer.entity.layers.CustomHeadLayer
 import net.minecraft.client.renderer.entity.layers.ElytraLayer
 import net.minecraft.client.renderer.entity.layers.ItemInHandLayer
+import net.minecraft.core.component.DataComponents
+import net.minecraft.network.chat.Component
 import net.minecraft.resources.ResourceLocation
 import net.minecraft.world.item.ItemStack
+import net.minecraft.world.item.Items
+import net.minecraft.world.item.alchemy.PotionContents
+import net.minecraft.world.item.alchemy.Potions
+import java.awt.Color
+import java.util.Locale
 
 
 class DummyRenderer(context: EntityRendererProvider.Context) : HumanoidMobRenderer<DummyEntity, DummyModel>(
@@ -72,102 +81,364 @@ class DummyRenderer(context: EntityRendererProvider.Context) : HumanoidMobRender
     ) {
         super.render(entity, entityYaw, partialTicks, poseStack, buffer, packedLight)
 
-        /*
-        poseStack.pushPose()
-        val scale = 1.02f
-        poseStack.scale(scale, scale, scale)
 
-        val glowTexture = getTextureLocation(entity)
-        val vertexConsumer: VertexConsumer = buffer.getBuffer(RenderType.eyes(glowTexture))
 
-        val r = 1.0f
-        val g = 0.2f
-        val b = 0.2f
-        val a = 1.0f
-
-        this.model.renderToBuffer(
-            poseStack,
-            vertexConsumer,
-            15728880, // Brilho total (Lightmap fullbright)
-            OverlayTexture.NO_OVERLAY,
-            FastColor.ARGB32.color((a * 255).toInt(), (r * 255).toInt(), (g * 255).toInt(), (b * 255).toInt())
-        )
-
-        poseStack.popPose()
-        */
-
-        //renderCARA(entity, entityYaw, partialTicks, poseStack, buffer, packedLight)
-        renderFloatingWindowModo(entity, poseStack, buffer, packedLight)
+        renderFloatingWindowModo(entity, partialTicks, poseStack, buffer, packedLight)
     }
 
 
     private fun renderFloatingWindowModo(
         entity: DummyEntity,
+        partialTicks: Float,
         poseStack: PoseStack,
         buffer: MultiBufferSource,
         packedLight: Int
 
     ) {
-        if(entity.displayTicks <= 0){return}
+
+
+        val modoAtual = entity.trainingModuleConfig.trainingModo
+        if (modoAtual != TrainingModos.DPS && entity.displayTicks <= 0) return
 
         val damageData = entity.damageData
         val damageDataOld = entity.damageDataOld
 
-        val stack =  entity.dummyInventory.getStackInSlot(4) ?: ItemStack.EMPTY
-        val modoAtual = TrainingModuleItem.getItemMode(stack)
+        val oldStack = entity.damageStackOld
+        val atualStack = entity.damageStack
 
         val window = FloatingWindow.Builder()
 
         when(modoAtual){
 
-            TrainingModos.DEFAULT -> {windowDefault(window,damageData, entity)}
+            TrainingModos.DEFAULT -> {windowConfigDefault(window, entity)}
             TrainingModos.DPS -> {
-
                 window.attachToEntityRotation(entity)
-                    .setOffset(0.6, 2.0, 0.0)
-                    .setSize(24f, 24f, autoScaleContent = true, autoFitWidth = true, autoFitHeight = true)
+                    .setOffset(0.9, 2.0, 0.0)
                     .setAlignment(WindowAlignment.CENTER)
-                    .setPadding(1f)
-                    .setBorder(Rainbow(speed = 1.0f), width = 0.5f)
-                    .setBackground(Solid(0xDD000000))
-                    .addText("Damage Per Second")
-                    .addText(" • ${damageData.newDamage}")
-                    .addSeparator(color = Rainbow(speed = 1.0f), thickness = 0.5f, margin = 2f)
-                    .addText("Average Damage Per Hit")
-                    .addText(" • ${damageData.originalDamage}")
+                    .setPadding(2f)
+                    .setSize(38f, 30f, autoScaleContent = true, autoFitWidth = true, autoFitHeight = true)
+                    .setCornerRadius(3f)
 
+                    .setBorder(
+                        when (entity.dpsTestState) {
+                            DummyEntity.DPS_STATE_READY -> AnimatedGradient(
+                                argbStart = 0xFF65E8A0,
+                                argbEnd = 0xFF21B6A8,
+                                speed = 0.8f,
+                                scale = 0.8f
+                            )
+                            DummyEntity.DPS_STATE_COOLDOWN -> AnimatedGradient(
+                                argbStart = 0xFFFFB454,
+                                argbEnd = 0xFFFF5A5A,
+                                speed = 0.8f,
+                                scale = 0.8f
+                            )
+                            else -> AnimatedGradient(
+                                argbStart = 0xFFC5A5FB,
+                                argbEnd = 0xFF5700AC,
+                                speed = 1.2f,
+                                scale = 0.8f
+                            )
+                        },
+                        width = 0.75f
+                    )
+                    .setBackground(
+                        Gradient(
+                            argbStart = 0xF0181C2A,
+                            argbEnd = 0xF02B233D
+                        )
+                    )
+
+                val formatDamage: (Float) -> String = { value ->
+                    String.format(Locale.ROOT, "%.1f", value)
+                }
+
+                when (entity.dpsTestState) {
+                    DummyEntity.DPS_STATE_MEASURING -> {
+                        val remainingSeconds =
+                            (entity.dpsTicksRemaining - partialTicks.coerceIn(0f, 1f)).coerceAtLeast(0f) / 20f
+                        val elapsedTicks = DummyEntity.DPS_TEST_DURATION_TICKS - entity.dpsTicksRemaining
+                        val currentDps = if (elapsedTicks >= 20) {
+                            entity.dpsTotalDamage / (elapsedTicks / 20f)
+                        } else {
+                            null
+                        }
+
+                            window.addText(
+                                Component.translatable(
+                                    "message.trainingdummy.dps.countdown",
+                                    formatDamage(remainingSeconds),
+                                    currentDps?.let(formatDamage) ?: "--"
+                                ),
+                                color = 0xFF9BE7FF.toInt(),
+                                shadow = true,
+                                textScale = 0.9f,
+                                alignment = WindowElement.Text.TextAlignment.CENTER
+                            )
+                                .addText(
+                                    Component.translatable(
+                                        "message.trainingdummy.dps.summary",
+                                        formatDamage(entity.dpsTotalDamage),
+                                        entity.dpsHitCount
+                                    ),
+                                    color = 0xFFFFFFFF.toInt(),
+                                    textScale = 0.9f,
+                                    alignment = WindowElement.Text.TextAlignment.CENTER
+                                )
+                    }
+
+                    DummyEntity.DPS_STATE_COOLDOWN -> {
+                            val averageHit = if (entity.dpsHitCount > 0) {
+                                entity.dpsTotalDamage / entity.dpsHitCount
+                            } else {
+                                0f
+                            }
+
+                            window.addText(
+                                Component.translatable(
+                                    "message.trainingdummy.dps.final",
+                                    formatDamage(entity.dpsTotalDamage / 5f)
+                                ),
+                                color = 0xFFE5D4FF.toInt(),
+                                shadow = true,
+                                textScale = 0.95f,
+                                alignment = WindowElement.Text.TextAlignment.CENTER
+                            )
+                                .addText(
+                                    Component.translatable(
+                                        "message.trainingdummy.dps.summary",
+                                        formatDamage(entity.dpsTotalDamage),
+                                        entity.dpsHitCount
+                                    ),
+                                    color = 0xFFFFFFFF.toInt(),
+                                    textScale = 0.9f,
+                                    alignment = WindowElement.Text.TextAlignment.CENTER
+                                )
+                                .addText(
+                                    Component.translatable(
+                                        "message.trainingdummy.dps.hitStats",
+                                        formatDamage(averageHit),
+                                        formatDamage(entity.dpsHighestHit)
+                                    ),
+                                    color = 0xFFD7C8FF.toInt(),
+                                    textScale = 0.85f,
+                                    alignment = WindowElement.Text.TextAlignment.CENTER
+                                )
+                    }
+
+                    else -> {
+                            window.addText(
+                                Component.translatable("message.trainingdummy.dps.ready"),
+                                color = 0xFFB7F7C5.toInt(),
+                                shadow = true,
+                                textScale = 0.9f,
+                                alignment = WindowElement.Text.TextAlignment.CENTER
+                            )
+                    }
+                }
             }
             TrainingModos.ACCUMULATED -> {
                 window.attachToEntityRotation(entity)
                     .setOffset(0.6, 2.0, 0.0)
                     .setSize(24f, 24f, autoScaleContent = true, autoFitWidth = true, autoFitHeight = true)
                     .setAlignment(WindowAlignment.CENTER)
+                    .setCornerRadius(3f)
                     .setPadding(1f)
                     .setBorder(Rainbow(speed = 1.0f), width = 0.5f)
                     .setBackground(Solid(0xDD000000))
 
-
+                    .addText(" • ${damageData.newDamage}")
             }
             TrainingModos.COMPARISON -> {
-                windowDefault(window,damageData, entity)//coloca nome (current)
-                val window2 = FloatingWindow.Builder()
-                windowDefault(window2,damageDataOld, entity)
+                windowDefault(window, damageDataOld, entity)
+                window.addItemText(entity.damageStackOld, "  ${damageDataOld.newDamage}")
+                val window2 = Builder()
+
+                windowDefault(window2,damageData, entity)
                 window2.setOffset(-0.6, 2.0, 0.0)
+                    .addItemText(entity.damageStack, "  ${damageData.newDamage}")
                 window2.build().render(poseStack, buffer, packedLight)//coloca nome (previous)
             }
+
+            //null -> {return}
         }
 
         window.build().render(poseStack, buffer, packedLight)
 
     }
 
-    private fun windowConfigDefault(){}
+    private val armorHudIcon = ResourceLocation.fromNamespaceAndPath(
+        "minecraft",
+        "textures/gui/sprites/hud/armor_full.png"
+    )
+
+    private val absorptionHudIcon = ResourceLocation.fromNamespaceAndPath(
+        "minecraft",
+        "textures/gui/sprites/hud/heart/absorbing_full.png"
+    )
+
+    private val enchantItem = Items.ENCHANTED_BOOK.defaultInstance
+    private val potionItem = Items.POTION.defaultInstance.also {
+        it.set(
+            DataComponents.POTION_CONTENTS,
+            PotionContents(Potions.HEALING)
+        )
+    }
+    private val innateResistanceItem = Items.STRUCTURE_VOID.defaultInstance
+    private val invulnerabilityItem = Items.BARRIER.defaultInstance
+
+
+
+
+    private fun windowConfigDefault(window : FloatingWindow.Builder, entity : DummyEntity, detailed : Boolean = false){
+        val damageData = entity.damageData
+        window.attachToEntityRotation(entity)
+            .setOffset(0.9, 2.0, 0.0)
+            .setSize(30f, 30f, autoScaleContent = true, autoFitWidth = true, autoFitHeight = true)
+            .setAlignment(WindowAlignment.CENTER)
+            .setPadding(3f)
+
+            .setBorder(
+                AnimatedGradient(
+                    argbStart = 0xC5A5FB,
+                    argbEnd = 0x5700ac,
+                    speed = 1.2f,
+                    scale = 0.8f
+                ),
+                width = 0.75f
+            )
+            .setBackground(
+                Gradient(
+                    argbStart = 0xF0181C2A,
+                    argbEnd = 0xF02B233D
+                )
+            )
+
+        if(detailed){
+            window.addText(Component.translatable("message.trainingdummy.original_damage").append(":"),
+                textScale = 0.8f,
+                shadow = true,
+                color = 0xDCDCDCFF.toInt()
+            )
+                .addText("${damageData.originalDamage}",
+                    color = 0xFF9BE7FF.toInt(), shadow = true, alignment = WindowElement.Text.TextAlignment.CENTER, textScale = 2.5f)
+                .addSeparator(
+                    color = AnimatedGradient(
+                        argbStart = 0xFF67E8F9,
+                        argbEnd = 0xFF8B5CF6,
+                        speed = 1.2f,
+                        scale = 0.8f
+                    ),
+                    thickness = 0.5f,
+                    margin = 2f
+                )
+
+                .addText(Component.translatable("message.trainingdummy.final_damage"),
+                    textScale = 0.8f,
+                    shadow = true,
+                    color = 0xDCDCDCFF.toInt()
+                )
+        }
+
+        window.addText( "${ if(detailed) {damageData.newDamage}else{"%.2f".format(damageData.newDamage)} }",
+            color = if(damageData.isCriticalHit){AnimatedGradient(
+                argbStart = 0xFF0000,
+                argbEnd = 0xff8c00,
+                speed = 5.0f,
+                scale = 0.8f
+            )}else{
+                Pulse(0xFF9BE7FF)} ,
+            shadow = true,
+            alignment = WindowElement.Text.TextAlignment.CENTER,
+            textScale = 2.5f)
+
+        if(damageData.isCriticalHit){
+            window.addText("x${damageData.damageMultiplier}crit",
+                shadow = true,
+                alignment = WindowElement.Text.TextAlignment.CENTER,
+                textScale = 0.8f,
+                color = Pulse(color = 0xff1a1a, speed = 1.5f))
+
+        }
+
+        if(damageData.isReductions()){
+
+            window.addSeparator(
+                color = AnimatedGradient(
+                    argbStart = 0xFF67E8F9,
+                    argbEnd = 0xFF8B5CF6,
+                    speed = 1.2f,
+                    scale = 0.8f
+                ),
+                thickness = 0.5f,
+                margin = 2f
+            )
+
+            if (damageData.armor > 0.0f) {
+                window.addIconText(
+                    armorHudIcon,
+                    ": -§a%.1f".format(damageData.armor),
+                    alignment = WindowElement.Text.TextAlignment.CENTER
+                )
+            }
+            if (damageData.enchantments > 0.0f) {
+                window.addItemText(
+                    enchantItem,
+                    ": -§a%.1f".format(damageData.enchantments),
+                    alignment = WindowElement.Text.TextAlignment.CENTER
+                )
+            }
+            if (damageData.mobEffects > 0.0f) {
+                window.addItemText(
+                    potionItem,
+                    ": -§a%.1f".format(damageData.mobEffects),
+                    alignment = WindowElement.Text.TextAlignment.CENTER
+                )
+            }
+            if (damageData.absorption > 0.0f) {
+                window.addIconText(
+                    absorptionHudIcon,
+                    ": -§a%.1f".format(damageData.absorption),
+                    alignment = WindowElement.Text.TextAlignment.CENTER
+                )
+            }
+            if (damageData.innateResistance > 0.0f) {
+                window.addItemText(
+                    innateResistanceItem,
+                    ": -§a%.1f".format(damageData.innateResistance),
+                    alignment = WindowElement.Text.TextAlignment.CENTER
+                )
+            }
+            if (damageData.invulnerability > 0.0f) {
+                window.addItemText(
+                    invulnerabilityItem,
+                    ": -§a%.1f".format(damageData.invulnerability),
+                    alignment = WindowElement.Text.TextAlignment.CENTER
+                )
+            }
+
+            window.addSeparator(
+                color = AnimatedGradient(
+                    argbStart = 0xFF67E8F9,
+                    argbEnd = 0xFF8B5CF6,
+                    speed = 1.2f,
+                    scale = 0.8f
+                ),
+                thickness = 0.5f,
+                margin = 2f
+            )
+
+        }
+
+    }
+
     private fun windowD(window: FloatingWindow.Builder,damageData: DamageData, entity: DummyEntity){
         window.attachToEntityRotation(entity)
             .setOffset(1.0, 2.0, 0.0)
             .setSize(24f, 24f, autoScaleContent = true, autoFitWidth = true, autoFitHeight = true)
             .setAlignment(WindowAlignment.CENTER)
-            .setPadding(1f)
+
+            .setPadding(3f)
             .setBorder(Rainbow(speed = 1.0f), width = 0.5f)
             .setBackground(Solid(0xDD000000))
 
@@ -212,8 +483,33 @@ class DummyRenderer(context: EntityRendererProvider.Context) : HumanoidMobRender
             .setSize(24f, 24f, autoScaleContent = true, autoFitWidth = true, autoFitHeight = true)
             .setAlignment(WindowAlignment.CENTER)
             .setPadding(1f)
-            .setBorder(Rainbow(speed = 1.0f), width = 0.5f)
-            .setBackground(Solid(0xDD000000))
+            .setCornerRadius(3f)
+            .setBorder(
+                AnimatedGradient(
+                    argbStart = 0xFF67E8F9,
+                    argbEnd = 0xFF8B5CF6,
+                    speed = 1.2f,
+                    scale = 0.8f
+                ),
+                width = 0.75f
+            )
+            .setBackground(
+                Gradient(
+                    argbStart = 0xF0181C2A,
+                    argbEnd = 0xF02B233D
+                )
+            )
+            .addText("DANO", color = 0xFF9BE7FF.toInt(), shadow = true)
+            .addSeparator(
+                color = AnimatedGradient(
+                    argbStart = 0xFF67E8F9,
+                    argbEnd = 0xFF8B5CF6,
+                    speed = 1.2f,
+                    scale = 0.8f
+                ),
+                thickness = 0.5f,
+                margin = 2f
+            )
 
         var finaldamage = ""
 
@@ -221,13 +517,15 @@ class DummyRenderer(context: EntityRendererProvider.Context) : HumanoidMobRender
             window.addText("Raw Damage: §c%.1f".format(damageData.originalDamage))
                 .addSeparator(color = Rainbow(speed = 1.0f), thickness = 0.5f, margin = 2f)
                 .addText("Reductions", color = 0x0087F0.toInt())
-        }else{window.setPadding(3f);}
+        }else{
+            window.setPadding(3f);
+        }
 
         if(damageData.armor > 0.0f){window.addText("Armor: -§a%.1f".format(damageData.armor))}
         if(damageData.enchantments > 0.0f){window.addText(" Enchantments: -§a%.1f".format(damageData.enchantments))}
         if(damageData.mobEffects > 0.0f){window.addText("Effects: -§a%.1f".format(damageData.mobEffects))}
         if(damageData.absorption > 0.0f){window.addText("Absorption: -§a%.1f".format(damageData.absorption))}
-        if(damageData.innateResistance > 0.0f){window.addText("Innate Resistance: -§a%.1f".format(damageData.absorption))}
+        if(damageData.innateResistance > 0.0f){window.addText("Innate Resistance: -§a%.1f".format(damageData.innateResistance))}
         if(damageData.invulnerability > 0.0f){window.addText("Invulnerability: -§a%.1f".format(damageData.invulnerability))}
 
         if(damageData.isReductions()){

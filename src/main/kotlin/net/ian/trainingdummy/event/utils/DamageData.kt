@@ -19,6 +19,7 @@ data class DamageData(
     val mobEffects: Float = 0f,
     val absorption: Float = 0f,
     val innateResistance: Float = 0f
+
 ){
     fun isReductions() : Boolean{return (invulnerability > 0.0f) || (armor > 0.0f) || (enchantments > 0.0f) || (mobEffects > 0.0f) || (absorption > 0.0f) || (innateResistance > 0.0f) }
     operator fun plus(other: DamageData): DamageData {

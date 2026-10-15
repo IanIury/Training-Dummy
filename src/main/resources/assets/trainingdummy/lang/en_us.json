@@ -1,14 +1,19 @@
 {
   "itemGroup.trainingdummy": "Training Dummy",
+
   "item.trainingdummy.dummy_item_spawn": "Training Dummy Spawn",
 
   "block.trainingdummy.example_block": "Training Dummy Observation",
   "block.trainingdummy.display_dummy": "Training Dummy Display",
 
   "entity.trainingdummy.training_dummy" : "Training Dummy",
+  "creativetab.trainingdummy.training_dummy_tab" : "Training Dummy",
 
-  "entity.trainingdummy.training_dummy_old" : "Dummy old",
-
-  "creativetab.trainingdummy.training_dummy_tab" : "Training Dummy"
-
+  "message.trainingdummy.original_damage": "Original damage",
+  "message.trainingdummy.final_damage": "Final Damage",
+  "message.trainingdummy.dps.countdown": "%s s | DPS %s",
+  "message.trainingdummy.dps.summary": "Damage %s | Hits %s",
+  "message.trainingdummy.dps.final": "DPS %s",
+  "message.trainingdummy.dps.hitStats": "Avg %s | Best %s",
+  "message.trainingdummy.dps.ready": "DPS ready - hit to start"
 }

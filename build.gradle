@@ -16,6 +16,20 @@ repositories {
         url = 'https://thedarkcolour.github.io/KotlinForForge/'
         content { includeGroup "thedarkcolour" }
     }
+
+    exclusiveContent {
+        forRepository {
+            maven {
+                name = 'Modrinth'
+                url = 'https://api.modrinth.com/maven'
+            }
+        }
+
+        filter {
+            includeGroup 'maven.modrinth'
+        }
+    }
+
 }
 
 base {
@@ -104,6 +118,8 @@ sourceSets.main.resources { srcDir 'src/generated/resources' }
 
 dependencies {
     implementation 'thedarkcolour:kotlinforforge-neoforge:5.10.0'
+    //implementation("curse.maven:modern-ui-352491:8206075")
+    //implementation "maven.modrinth:3sjzyvGR:eMf1VSQd"
 
     // Example mod dependency with JEI
     // The JEI API is declared for compile time use, while the full JEI artifact is used at runtime

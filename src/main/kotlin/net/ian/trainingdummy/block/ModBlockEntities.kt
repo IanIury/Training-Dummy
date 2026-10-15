@@ -13,16 +13,16 @@ import thedarkcolour.kotlinforforge.neoforge.forge.getValue
 
 object ModBlockEntities {
 
-    val REGISTRY = DeferredRegister.create(BuiltInRegistries.BLOCK_ENTITY_TYPE, TrainingDummy.ID)
+    val REGISTRY: DeferredRegister<BlockEntityType<*>?> = DeferredRegister.create(BuiltInRegistries.BLOCK_ENTITY_TYPE, TrainingDummy.ID)
 
-    val DISPLAY_DUMMY_BE by REGISTRY.register("display_dummy_be"){ ->
+    val DISPLAY_DUMMY_BE: BlockEntityType<DisplayDummyBlockEntity?> by REGISTRY.register("display_dummy_be"){ ->
         BlockEntityType.Builder.of(
             ::DisplayDummyBlockEntity, ModBlocks.DISPLAY_DUMMY_BLOCK
         )
             .build(null)
     }
 
-    val DUMMY_MANAGEMENT_BE by REGISTRY.register("dummy_management_be"){ ->
+    val DUMMY_MANAGEMENT_BE: BlockEntityType<DummyManagementBlockEntity?> by REGISTRY.register("dummy_management_be"){ ->
         BlockEntityType.Builder.of(
             ::DummyManagementBlockEntity, ModBlocks.DUMMY_MANAGEMENT_BLOCK
         )

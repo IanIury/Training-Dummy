@@ -1,17 +1,11 @@
 package net.ian.trainingdummy.screen.custom
 
 import net.ian.trainingdummy.entity.DummyEntity
-import net.ian.trainingdummy.entity.ModEntities
-import net.ian.trainingdummy.item.ModItems
 import net.ian.trainingdummy.screen.ModMenuTypes
 import net.minecraft.network.FriendlyByteBuf
-import net.minecraft.world.Container
-import net.minecraft.world.SimpleContainer
-import net.minecraft.world.entity.EquipmentSlot
 import net.minecraft.world.entity.player.Inventory
 import net.minecraft.world.entity.player.Player
 import net.minecraft.world.inventory.AbstractContainerMenu
-import net.minecraft.world.inventory.ContainerLevelAccess
 import net.minecraft.world.inventory.Slot
 import net.minecraft.world.item.ItemStack
 import net.neoforged.neoforge.items.ItemStackHandler
@@ -44,15 +38,15 @@ class DummyMenu(
 
         }else {
             // Fallback caso o Dummy seja nulo no cliente temporariamente
-            val dummyInventory = object : ItemStackHandler(5) {}
+            val dummyInventory = object : ItemStackHandler(7) {}
             for (i in 0 until 4) {
                 this.addSlot(SlotItemHandler(dummyInventory, i, 8, 8 + i * 18))
             }
 
             this.addSlot(SlotItemHandler(dummyInventory, 4, 115, 30))
 
-            this.addSlot(SlotItemHandler(dummyInventory, 5, 80, 80))
-            this.addSlot(SlotItemHandler(dummyInventory, 6, 98, 80))
+            this.addSlot(SlotItemHandler(dummyInventory, 5, 79, 62))
+            this.addSlot(SlotItemHandler(dummyInventory, 6, 97, 62))
 
         }
 
@@ -71,10 +65,13 @@ class DummyMenu(
 
     override fun stillValid(player: Player): Boolean {
         val entity = dummy ?: return  false
-        return entity.isAlive
+        return entity.isAlive &&
+            player.level() === entity.level() &&
+            player.distanceToSqr(entity) <= MAX_DUMMY_DISTANCE_SQUARED
     }
 
     companion object {
+        private const val MAX_DUMMY_DISTANCE_SQUARED = 64.0
         private const val DUMMY_SLOT_COUNT = 7 // 4 Armaduras + 1 Upgrade
 
         private const val HOTBAR_SLOT_COUNT = 9

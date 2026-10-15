@@ -1,7 +1,7 @@
 package net.ian.trainingdummy.network
 
 import net.ian.trainingdummy.init.enums.TrainingModos
-import net.ian.trainingdummy.item.custom.TrainingModuleItem
+import net.ian.trainingdummy.item.ModItems
 import net.ian.trainingdummy.screen.custom.DummyMenu
 import net.minecraft.network.FriendlyByteBuf
 import net.minecraft.network.codec.StreamCodec
@@ -28,21 +28,17 @@ class ServerboundChangeModePayload(
                 val player = context.player()
                 val container = player.containerMenu
 
-                if (container is DummyMenu) {
+                if (container is DummyMenu && container.stillValid(player)) {
                     val dummy = container.dummy ?: return@enqueueWork
                     val slotIndex = 4
                     val stack = dummy.dummyInventory.getStackInSlot(slotIndex)
 
-                    if (!stack.isEmpty) {
-                        // 1. Aplica o novo modo na tag NBT
-                        TrainingModuleItem.setItemMode(stack, payload.modo)
-
-                        // 2. Atualiza o slot do handler
-                        dummy.dummyInventory.setStackInSlot(slotIndex, stack)
-                        dummy.trainingModo = payload.modo
+                    if (stack.`is`(ModItems.TRAINING_MODULE_ITEM)) {
+                        dummy.trainingModuleConfig = dummy.trainingModuleConfig.copy(
+                            trainingModo = payload.modo
+                        )
                         dummy.resetModoState()
 
-                        // 3. Notifica o servidor que o inventário foi alterado (força persistência e sync)
                         container.broadcastChanges()
                     }
                 }

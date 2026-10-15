@@ -6,10 +6,11 @@ import net.ian.trainingdummy.init.enums.TrainingModos
 import net.minecraft.network.FriendlyByteBuf
 import net.minecraft.network.codec.ByteBufCodecs
 import net.minecraft.network.codec.StreamCodec
+import net.minecraft.network.syncher.EntityDataSerializer
 
 data class TrainingModuleConfig(
 
-    var trainingModo : TrainingModos = TrainingModos.DEFAULT,
+    val trainingModo : TrainingModos = TrainingModos.DEFAULT,
 
     ) {
 
@@ -25,6 +26,9 @@ data class TrainingModuleConfig(
             TrainingModos.STREAM_CODEC, TrainingModuleConfig::trainingModo,
             ::TrainingModuleConfig
         )
+
+        val TRAINING_MODULE_CONFIG: EntityDataSerializer<TrainingModuleConfig> =
+            EntityDataSerializer.forValueType(STREAM_CODEC)
 
     }
 

@@ -4,6 +4,7 @@ import com.mojang.blaze3d.systems.RenderSystem
 import net.ian.trainingdummy.TrainingDummy
 import net.ian.trainingdummy.init.enums.TrainingModos
 import net.ian.trainingdummy.item.custom.TrainingModuleItem
+import net.ian.trainingdummy.network.ServerboundChangeModePayload
 import net.minecraft.client.Minecraft
 import net.minecraft.client.gui.GuiGraphics
 import net.minecraft.client.gui.components.Button
@@ -13,6 +14,7 @@ import net.minecraft.network.chat.Component
 import net.minecraft.resources.ResourceLocation
 import net.minecraft.world.entity.player.Inventory
 import net.minecraft.world.item.ItemStack
+import net.neoforged.neoforge.network.PacketDistributor
 
 class DummyScreen(
     menu: DummyMenu,
@@ -34,8 +36,9 @@ class DummyScreen(
 
 
 
-        val stack = menu.dummy?.dummyInventory?.getStackInSlot(4) ?: return
-        val modo = TrainingModuleItem.getItemMode(stack)
+        //val stack = menu.dummy?.dummyInventory?.getStackInSlot(4) ?: return
+        val modo = menu.dummy?.trainingModuleConfig?.trainingModo ?: return
+
         this.lastMode = modo
 
         println("MODO: " + modo.name)
@@ -73,6 +76,7 @@ class DummyScreen(
                     )
                 }
 
+
                 override fun mouseClicked(mouseX: Double, mouseY: Double, button: Int): Boolean {
                     if (this.active && this.visible && this.clicked(mouseX, mouseY)) {
                         val isDireito = button == 1
@@ -82,11 +86,16 @@ class DummyScreen(
 
                             val stack = menu.dummy?.dummyInventory?.getStackInSlot(4) ?: return true
                             if(stack.isEmpty) return true
-                            val modoAtual = TrainingModuleItem.getItemMode(stack)
+                            val modoAtual = menu.dummy?.trainingModuleConfig?.trainingModo ?: return true
+
                             val newModo = if (isDireito) modoAtual.previous() else modoAtual.next()
 
-                            menu.dummy?.trainingModo = newModo
-                            //PacketDistributor.sendToServer(ServerboundChangeModePayload(newModo))
+                            menu.dummy?.let { dummy ->
+                                dummy.trainingModuleConfig = dummy.trainingModuleConfig.copy(
+                                    trainingModo = newModo
+                                )
+                                PacketDistributor.sendToServer(ServerboundChangeModePayload(newModo))
+                            }
 
                             this.message = Component.literal("Modo: ${newModo.nameD()}")
                             this.createNarration.createNarrationMessage { Component.literal(newModo.nameD()) }
@@ -116,7 +125,7 @@ class DummyScreen(
 
         if (hasUpgrade) {
             val stack = menu.dummy?.dummyInventory?.getStackInSlot(4) ?: ItemStack.EMPTY
-            val modoAtual = TrainingModuleItem.getItemMode(stack)
+            val modoAtual = menu.dummy?.trainingModuleConfig?.trainingModo ?: return//TrainingModuleItem.getItemMode(stack)
 
             // Se o item mudou ou o modo do item mudou, atualiza a mensagem do botão
             if (modoAtual != lastMode) {

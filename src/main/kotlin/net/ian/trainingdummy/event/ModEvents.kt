@@ -5,6 +5,7 @@ import net.ian.trainingdummy.entity.DummyEntity
 import net.ian.trainingdummy.event.utils.DamageData
 import net.minecraft.util.Mth
 import net.minecraft.world.entity.player.Player
+import net.minecraft.world.item.ItemStack
 import net.minecraft.world.item.MaceItem
 import net.neoforged.bus.api.SubscribeEvent
 import net.neoforged.fml.common.EventBusSubscriber
@@ -30,6 +31,9 @@ object ModEvents {
         val vitima : DummyEntity = event.entity as? DummyEntity ?: return
 
         var damageData = DamageData()
+
+        vitima.damageStackOld = vitima.damageStack
+        vitima.damageStack = event.source.weaponItem ?: ItemStack.EMPTY
 
         if(event.source.entity is Player){damageData = vitima.preDamageData}
 

@@ -10,7 +10,6 @@ import net.minecraft.client.renderer.BlockEntityWithoutLevelRenderer
 import net.minecraft.client.renderer.MultiBufferSource
 import net.minecraft.core.NonNullList
 import net.minecraft.core.component.DataComponents
-import net.minecraft.world.entity.EquipmentSlot
 import net.minecraft.world.item.ItemDisplayContext
 import net.minecraft.world.item.ItemStack
 import net.minecraft.world.item.component.ItemContainerContents
@@ -105,7 +104,10 @@ class DummyItemRenderer : BlockEntityWithoutLevelRenderer(
     private fun applyEquipmentSafely(dummy: DummyEntity, stack: ItemStack) {
 
         stack.get(DataComponents.PROFILE)?.let { if(dummy.profilePlayer != it) dummy.profilePlayer = it }
-        stack.get(DataComponents.CUSTOM_NAME)?.let { if(dummy.customName!=it) dummy.applyCustomName(it) }
+        val customName = stack.get(DataComponents.CUSTOM_NAME)
+        if (dummy.customName != customName) {
+            dummy.applyCustomName(customName)
+        }
 
         val containerContents = stack.getOrDefault(DataComponents.CONTAINER, ItemContainerContents.EMPTY)
         val itemsList = NonNullList.withSize(dummy.dummyInventory.slots, ItemStack.EMPTY)
@@ -124,12 +126,6 @@ class DummyItemRenderer : BlockEntityWithoutLevelRenderer(
             }
         }
 
-        dummy.setItemSlot(EquipmentSlot.HEAD, dummy.dummyInventory.getStackInSlot(0))
-        dummy.setItemSlot(EquipmentSlot.CHEST, dummy.dummyInventory.getStackInSlot(1))
-        dummy.setItemSlot(EquipmentSlot.LEGS, dummy.dummyInventory.getStackInSlot(2))
-        dummy.setItemSlot(EquipmentSlot.FEET, dummy.dummyInventory.getStackInSlot(3))
-        dummy.setItemSlot(EquipmentSlot.MAINHAND, dummy.dummyInventory.getStackInSlot(5))
-        dummy.setItemSlot(EquipmentSlot.OFFHAND, dummy.dummyInventory.getStackInSlot(6))
     }
 
 }

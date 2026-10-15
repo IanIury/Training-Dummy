@@ -1,11 +1,15 @@
 package net.ian.trainingdummy.entity
 
+import net.ian.trainingdummy.client.modernUi.ui.DummyScreen
 import net.ian.trainingdummy.entity.animation.DummyHitAnimationState
 import net.ian.trainingdummy.entity.animation.DummyMaceAnimationState
 import net.ian.trainingdummy.entity.part.DummyPartEntity
 import net.ian.trainingdummy.event.utils.DamageData
+import net.ian.trainingdummy.init.components.ModDataComponents
+import net.ian.trainingdummy.init.components.TrainingModuleConfig
 import net.ian.trainingdummy.init.enums.TrainingModos
 import net.ian.trainingdummy.init.serializers.ModDataSerializers
+import net.ian.trainingdummy.init.serializers.ModDataSerializersRegistry
 import net.ian.trainingdummy.item.ModItems
 import net.ian.trainingdummy.item.custom.DisplayDummyBlockItem
 import net.ian.trainingdummy.item.custom.TrainingModuleItem
@@ -28,7 +32,11 @@ import net.minecraft.world.InteractionResult
 import net.minecraft.world.SimpleMenuProvider
 import net.minecraft.world.damagesource.DamageSource
 import net.minecraft.world.damagesource.DamageTypes
-import net.minecraft.world.entity.*
+import net.minecraft.world.entity.AnimationState
+import net.minecraft.world.entity.Entity
+import net.minecraft.world.entity.EntityType
+import net.minecraft.world.entity.EquipmentSlot
+import net.minecraft.world.entity.Mob
 import net.minecraft.world.entity.ai.attributes.AttributeSupplier
 import net.minecraft.world.entity.ai.attributes.Attributes
 import net.minecraft.world.entity.player.Player
@@ -78,9 +86,37 @@ open class DummyEntity(
 
     var preDamageData: DamageData = DamageData()
 
+    var damageStack : ItemStack
+        get() = entityData.get(DAMAGE_ITEMSTACK)
+        set(value) = entityData.set(DAMAGE_ITEMSTACK,value)
+
+    var damageStackOld : ItemStack
+        get() = entityData.get(DAMAGE_ITEMSTACK_OLD)
+        set(value) = entityData.set(DAMAGE_ITEMSTACK_OLD,value)
+
     var displayTicks: Int
         get() = entityData.get(DISPLAY_TICKS)
         set(value) = entityData.set(DISPLAY_TICKS, value)
+
+    var dpsTestState: Int
+        get() = entityData.get(DPS_TEST_STATE)
+        private set(value) = entityData.set(DPS_TEST_STATE, value)
+
+    var dpsTicksRemaining: Int
+        get() = entityData.get(DPS_TICKS_REMAINING)
+        private set(value) = entityData.set(DPS_TICKS_REMAINING, value)
+
+    var dpsTotalDamage: Float
+        get() = entityData.get(DPS_TOTAL_DAMAGE)
+        private set(value) = entityData.set(DPS_TOTAL_DAMAGE, value)
+
+    var dpsHitCount: Int
+        get() = entityData.get(DPS_HIT_COUNT)
+        private set(value) = entityData.set(DPS_HIT_COUNT, value)
+
+    var dpsHighestHit: Float
+        get() = entityData.get(DPS_HIGHEST_HIT)
+        private set(value) = entityData.set(DPS_HIGHEST_HIT, value)
 
     // ========================================================================
     // INICIALIZAÇÃO E REGISTRO DE DADOS
@@ -104,8 +140,17 @@ open class DummyEntity(
         builder.define(HIT_ROLL, 0.0f)
         builder.define(HIT_TRIGGER, 0)
 
-        builder.define(DUMMY_DATA, CompoundTag())
         builder.define(OPTIONAL_PROFILE, Optional.empty())
+        builder.define(TRAINING_CONFIG_DATA, TrainingModuleConfig())
+
+        builder.define(DAMAGE_ITEMSTACK, ItemStack.EMPTY)
+        builder.define(DAMAGE_ITEMSTACK_OLD, ItemStack.EMPTY)
+        builder.define(DPS_TEST_STATE, DPS_STATE_READY)
+        builder.define(DPS_TICKS_REMAINING, 0)
+        builder.define(DPS_TOTAL_DAMAGE, 0f)
+        builder.define(DPS_HIT_COUNT, 0)
+        builder.define(DPS_HIGHEST_HIT, 0f)
+
     }
 
 
@@ -254,29 +299,27 @@ open class DummyEntity(
             val stack = getStackInSlot(slot)
 
             // Sincroniza o inventário da GUI com os slots nativos de equipamento da Entidade
-            when (slot) {
-                0 -> setItemSlot(EquipmentSlot.HEAD, stack)
-                1 -> setItemSlot(EquipmentSlot.CHEST, stack)
-                2 -> setItemSlot(EquipmentSlot.LEGS, stack)
-                3 -> setItemSlot(EquipmentSlot.FEET, stack)
-                5 -> setItemSlot(EquipmentSlot.MAINHAND, stack)
-                6 -> setItemSlot(EquipmentSlot.OFFHAND, stack)
+            equipmentSlotForInventorySlot(slot)?.let { setItemSlot(it, stack) }
+
+            if (slot == TRAINING_MODULE_SLOT && !level().isClientSide) {
+                syncTrainingModuleConfig(stack)
             }
         }
 
         override fun isItemValid(slot: Int, stack: ItemStack): Boolean {
             return when (slot) {
-                0 -> stack.canEquip(EquipmentSlot.HEAD, this@DummyEntity)
-                1 -> stack.canEquip(EquipmentSlot.CHEST, this@DummyEntity)
-                2 -> stack.canEquip(EquipmentSlot.LEGS, this@DummyEntity)
-                3 -> stack.canEquip(EquipmentSlot.FEET, this@DummyEntity)
-                4 -> stack.`is`(ModItems.TRAINING_MODULE_ITEM)
-                5, 6 -> true
+                HEAD_INVENTORY_SLOT -> stack.canEquip(EquipmentSlot.HEAD, this@DummyEntity)
+                CHEST_INVENTORY_SLOT -> stack.canEquip(EquipmentSlot.CHEST, this@DummyEntity)
+                LEGS_INVENTORY_SLOT -> stack.canEquip(EquipmentSlot.LEGS, this@DummyEntity)
+                FEET_INVENTORY_SLOT -> stack.canEquip(EquipmentSlot.FEET, this@DummyEntity)
+                TRAINING_MODULE_SLOT -> stack.`is`(ModItems.TRAINING_MODULE_ITEM)
+                MAIN_HAND_INVENTORY_SLOT, OFF_HAND_INVENTORY_SLOT -> true
                 else -> false
             }
         }
 
-        override fun getSlotLimit(slot: Int): Int = if (slot == 5 || slot == 6) 64 else 1
+        override fun getSlotLimit(slot: Int): Int =
+            if (slot == MAIN_HAND_INVENTORY_SLOT || slot == OFF_HAND_INVENTORY_SLOT) 64 else 1
 
 
     }
@@ -285,12 +328,12 @@ open class DummyEntity(
 
     private fun setEquipmentAndSync(slot: EquipmentSlot, stack: ItemStack) {
         val invSlot = when (slot) {
-            EquipmentSlot.HEAD -> 0
-            EquipmentSlot.CHEST -> 1
-            EquipmentSlot.LEGS -> 2
-            EquipmentSlot.FEET -> 3
-            EquipmentSlot.MAINHAND -> 5
-            EquipmentSlot.OFFHAND -> 6
+            EquipmentSlot.HEAD -> HEAD_INVENTORY_SLOT
+            EquipmentSlot.CHEST -> CHEST_INVENTORY_SLOT
+            EquipmentSlot.LEGS -> LEGS_INVENTORY_SLOT
+            EquipmentSlot.FEET -> FEET_INVENTORY_SLOT
+            EquipmentSlot.MAINHAND -> MAIN_HAND_INVENTORY_SLOT
+            EquipmentSlot.OFFHAND -> OFF_HAND_INVENTORY_SLOT
             else -> -1
         }
 
@@ -302,70 +345,30 @@ open class DummyEntity(
         }
     }
 
-    /**
-     * Converte o Dummy atual em um ItemStack, gravando Equipamentos e o NBT (DUMMY_DATA).
-     */
-
+    /** Converte o Dummy atual em um item com inventário, perfil e nome. */
     fun createItemFromDummy(): ItemStack {
         val itemStack = ItemStack(ModItems.DUMMY_ITEM_SPAWN)
 
-        // Converte os itens do dummyInventory em uma lista para o componente CONTAINER nativo
         val itemsList = NonNullList.withSize(dummyInventory.slots, ItemStack.EMPTY)
         for (i in 0 until dummyInventory.slots) {
             itemsList[i] = dummyInventory.getStackInSlot(i)
         }
 
-        // Salva o inventário inteiro direto no ItemStack
         itemStack.set(DataComponents.CONTAINER, ItemContainerContents.fromItems(itemsList))
         itemStack.set(DataComponents.PROFILE,profilePlayer)
         itemStack.set(DataComponents.CUSTOM_NAME, this.customName)
 
-        val dummyTag = entityData.get(DUMMY_DATA)
-
         return itemStack
     }
-
-    /*
-    fun createItemFromDummyOLD(): ItemStack {
-        val itemStack = ItemStack(ModItems.DUMMY_ITEM_SPAWN)
-
-        // 1. Salva os equipamentos no componente do Mod
-        val armor = NonNullList.withSize(4, ItemStack.EMPTY).apply {
-            this[0] = getItemBySlot(EquipmentSlot.FEET)
-            this[1] = getItemBySlot(EquipmentSlot.LEGS)
-            this[2] = getItemBySlot(EquipmentSlot.CHEST)
-            this[3] = getItemBySlot(EquipmentSlot.HEAD)
-        }
-        val hands = NonNullList.withSize(2, ItemStack.EMPTY).apply {
-            this[0] = getItemBySlot(EquipmentSlot.MAINHAND)
-            this[1] = getItemBySlot(EquipmentSlot.OFFHAND)
-        }
-
-        itemStack.set(ModDataComponents.DUMMY_DATA.get(), DummyData(armor = armor, hands = hands))
-
-        itemStack.set(DataComponents.CUSTOM_NAME, this.customName)
-
-        //Salva o CompoundTag do Dummy (Contendo SkullProfile e NBTs customizadas) no CUSTOM_DATA do Item
-        val dummyTag = entityData.get(DUMMY_DATA)
-        if (!dummyTag.isEmpty) {
-            CustomData.update(DataComponents.CUSTOM_DATA, itemStack) { tag ->
-                tag.merge(dummyTag)
-                tag.putString("custom_name",this.customName?.string ?: "" )
-            }
-        }
-        return itemStack
-    }
-    */
 
     fun applyCompoundTagsFromItem(stack: ItemStack) {
-
         stack.get(DataComponents.PROFILE)?.let { this.profilePlayer = it }
-
-        stack.get(DataComponents.CUSTOM_NAME)?.let {  super.customName = it }
-
+        stack.get(DataComponents.CUSTOM_NAME)?.let { super.customName = it }
     }
 
-    fun applyCustomName(name : Component?){ super.customName = name }
+    fun applyCustomName(name: Component?) {
+        super.customName = name
+    }
 
     // ========================================================================
     // INTERAÇÕES E EQUIPAMENTOS
@@ -381,17 +384,11 @@ open class DummyEntity(
     }
 
     override fun dropCustomDeathLoot(serverLevel: ServerLevel, source: DamageSource, p_21387_: Boolean) {
-       //super.dropCustomDeathLoot(serverLevel, source, p_21387_)
-
-        EquipmentSlot.entries.forEach {
-            val stack = this.getItemBySlot(it)
-            if(!stack.isEmpty){
-                this.setItemSlot(it, ItemStack.EMPTY)
-                this.spawnAtLocation(stack)
-            }
+        val dummyStack = createItemFromDummy()
+        for (slot in 0 until dummyInventory.slots) {
+            dummyInventory.setStackInSlot(slot, ItemStack.EMPTY)
         }
-
-        this.spawnAtLocation(createItemFromDummy())
+        spawnAtLocation(dummyStack)
     }
 
     override fun mobInteract(player: Player, hand: InteractionHand): InteractionResult {
@@ -401,55 +398,6 @@ open class DummyEntity(
         }
 
         val heldItem = player.getItemInHand(hand)
-
-        /*
-        if (heldItem.`is`(ModItems.DUMMY_ITEM_SPAWN)) {
-            if (!level().isClientSide) {
-                val itemToReturn = createItemFromDummy()
-                val containerContents = heldItem.getOrDefault(DataComponents.CONTAINER, ItemContainerContents.EMPTY)
-                val newItems = NonNullList.withSize(dummyInventory.slots, ItemStack.EMPTY)
-                containerContents.copyInto(newItems)
-                for (i in 0 until dummyInventory.slots) {
-                    dummyInventory.setStackInSlot(i, newItems.getOrElse(i) { ItemStack.EMPTY })
-                }
-                player.setItemInHand(hand, itemToReturn)
-            }
-            return InteractionResult.sidedSuccess(level().isClientSide)
-        }
-        */
-
-        /*
-        if (heldItem.`is`(ModItems.DUMMY_ITEM_SPAWN)) {
-            if (!level().isClientSide) {
-                val data = heldItem.get(ModDataComponents.DUMMY_DATA.get()) ?: DummyData()
-
-                // 1. Armazena equipamentos atuais da entidade para gravar no item da mão
-                val currentArmor = NonNullList.withSize(4, ItemStack.EMPTY).apply {
-                    this[0] = getItemBySlot(EquipmentSlot.FEET).copy()
-                    this[1] = getItemBySlot(EquipmentSlot.LEGS).copy()
-                    this[2] = getItemBySlot(EquipmentSlot.CHEST).copy()
-                    this[3] = getItemBySlot(EquipmentSlot.HEAD).copy()
-                }
-                val currentHands = NonNullList.withSize(2, ItemStack.EMPTY).apply {
-                    this[0] = getItemBySlot(EquipmentSlot.MAINHAND).copy()
-                    this[1] = getItemBySlot(EquipmentSlot.OFFHAND).copy()
-                }
-
-                // 2. Aplica a nova armadura (vinda do item) na Entidade e sincroniza com a GUI
-                setEquipmentAndSync(EquipmentSlot.FEET, data.armor.getOrElse(0) { ItemStack.EMPTY }.copy())
-                setEquipmentAndSync(EquipmentSlot.LEGS, data.armor.getOrElse(1) { ItemStack.EMPTY }.copy())
-                setEquipmentAndSync(EquipmentSlot.CHEST, data.armor.getOrElse(2) { ItemStack.EMPTY }.copy())
-                setEquipmentAndSync(EquipmentSlot.HEAD, data.armor.getOrElse(3) { ItemStack.EMPTY }.copy())
-
-                setEquipmentAndSync(EquipmentSlot.MAINHAND, data.hands.getOrElse(0) { ItemStack.EMPTY }.copy())
-                setEquipmentAndSync(EquipmentSlot.OFFHAND, data.hands.getOrElse(1) { ItemStack.EMPTY }.copy())
-
-                // 3. Atualiza o item segurado pelo jogador com o inventário antigo do Dummy
-                val newData = DummyData(armor = currentArmor, hands = currentHands)
-                heldItem.set(ModDataComponents.DUMMY_DATA.get(), newData)
-            }
-            return InteractionResult.sidedSuccess(level().isClientSide)
-        }*/
 
         return InteractionResult.PASS
     }
@@ -492,7 +440,6 @@ open class DummyEntity(
         return InteractionResult.PASS
     }
 
-
     override fun setCustomName(name: Component?) {
         super.setCustomName(name)
         name?.also { setSkinByUsername(it.string) } ?: run {profilePlayer = null}
@@ -510,6 +457,12 @@ open class DummyEntity(
     }
 
     fun interactBaseDummy(player: Player, hand: InteractionHand) : InteractionResult {
+
+        if (level().isClientSide) {
+            DummyScreen.open()
+            return InteractionResult.sidedSuccess(true)
+        }
+
         if (!this.isAlive) return InteractionResult.PASS
 
         if (player.isShiftKeyDown) {
@@ -578,49 +531,70 @@ open class DummyEntity(
     // VARIÁVEIS DE CONTROLE DE MODO
     // ========================================================================
 
+    var trainingModuleConfig : TrainingModuleConfig
+        get() {
+            if (this.level().isClientSide) {
+                return this.entityData.get(TRAINING_CONFIG_DATA)
+            }
+            val moduleStack = dummyInventory.getStackInSlot(TRAINING_MODULE_SLOT)
+            return moduleStack.get(ModDataComponents.TRAINING_MODULE_CONFIG)
+                ?: TrainingModuleConfig(
+                    TrainingModuleItem.getItemTrainingMode(moduleStack) ?: TrainingModos.DEFAULT
+                )
+        }
+        set(value) {
+            val stack = dummyInventory.getStackInSlot(TRAINING_MODULE_SLOT).copy()
+            if (!stack.`is`(ModItems.TRAINING_MODULE_ITEM)) {
+                if (!this.level().isClientSide) {
+                    this.entityData.set(TRAINING_CONFIG_DATA, TrainingModuleConfig())
+                }
+                return
+            }
+            stack.set(ModDataComponents.TRAINING_MODULE_CONFIG,value)
+            dummyInventory.setStackInSlot(TRAINING_MODULE_SLOT,stack)
+            if (!this.level().isClientSide) {
+                this.entityData.set(TRAINING_CONFIG_DATA, value)
+            }
+        }
 
-    var trainingModo : TrainingModos
-        get() {val stack =  dummyInventory.getStackInSlot(4); return TrainingModuleItem.getItemMode(stack)}
-        set(value) {val stack =  dummyInventory.getStackInSlot(4); dummyInventory.setStackInSlot(4,TrainingModuleItem.setItemMode(stack,value))}
-        //get() = TrainingModuleItem.TrainingModos.fromString(entityData.get(MODO_TREINO))
-        //set(value) {entityData.set(MODO_TREINO,value.name)}
-
-    private var timerModo: Int = 0          // Tempo do teste (ex: 100 ticks = 5s)
-    private var timerModoEspera: Int = 0    // Cooldown/Espera pós-teste (ex: 60 ticks = 3s)
-    private var aticveModo: Boolean = false
-    private var emEspera: Boolean = false   // Trava o inicio de um novo combo durante os 3s
-    private var accumulatedDamageInWindow: Float = 0f
-    private var totalHits: Int = 0
-
-    //private var lastHitDamage: Float = 0f
+    private fun syncTrainingModuleConfig(moduleStack: ItemStack) {
+        val config = if (moduleStack.`is`(ModItems.TRAINING_MODULE_ITEM)) {
+            moduleStack.get(ModDataComponents.TRAINING_MODULE_CONFIG)
+                ?: TrainingModuleConfig(
+                    TrainingModuleItem.getItemTrainingMode(moduleStack) ?: TrainingModos.DEFAULT
+                )
+        } else {
+            TrainingModuleConfig()
+        }
+        entityData.set(TRAINING_CONFIG_DATA, config)
+    }
 
     fun onCustomDamageReceived(incomingData: DamageData) {
-        val modo = trainingModo
+        val modo = trainingModuleConfig.trainingModo
         when (modo) {
             TrainingModos.DEFAULT -> {
                 this.damageData = incomingData
             }
             TrainingModos.DPS -> {
-                if (emEspera) return
-
-                if (!aticveModo) {
-                    timerModo = 100
-                    aticveModo = true
-                    totalHits = 1
-                    accumulatedDamageInWindow = incomingData.newDamage
-                } else {
-                    totalHits++
-                    accumulatedDamageInWindow += incomingData.newDamage
+                when (dpsTestState) {
+                    DPS_STATE_READY -> {
+                        dpsTotalDamage = 0f
+                        dpsHitCount = 0
+                        dpsHighestHit = 0f
+                        dpsTicksRemaining = DPS_TEST_DURATION_TICKS
+                        dpsTestState = DPS_STATE_MEASURING
+                    }
+                    DPS_STATE_COOLDOWN -> {
+                        damageData = incomingData
+                        return
+                    }
                 }
 
-                val timePassedSeconds = ((100 - timerModo).coerceAtLeast(1)) / 20f
-                val currentDps = accumulatedDamageInWindow / timePassedSeconds
-                val averageDamagePerHit = accumulatedDamageInWindow / totalHits
-
-                this.damageData = incomingData.copy(
-                    newDamage = currentDps,
-                    originalDamage = averageDamagePerHit
-                )
+                val hitDamage = incomingData.newDamage.coerceAtLeast(0f)
+                dpsTotalDamage += hitDamage
+                dpsHitCount++
+                dpsHighestHit = maxOf(dpsHighestHit, hitDamage)
+                damageData = incomingData
             }
 
             TrainingModos.ACCUMULATED -> {
@@ -628,10 +602,7 @@ open class DummyEntity(
             }
 
             TrainingModos.COMPARISON -> {
-                //val diff = incomingData.newDamage - lastHitDamage
-                //lastHitDamage = incomingData.newDamage
-
-                this.damageData = incomingData//.copy(originalDamage = diff)
+                this.damageData = incomingData
             }
         }
     }
@@ -653,35 +624,33 @@ open class DummyEntity(
                 displayTicks--
             }
 
-            if (aticveModo) {
-                timerModo--
-                if (timerModo <= 0) {
-                    val finalDps = accumulatedDamageInWindow / 5.0f
-                    this.damageData = this.damageData.copy(newDamage = finalDps)
-
-                    aticveModo = false
-                    emEspera = true
-                    timerModoEspera = 60
+            when (dpsTestState) {
+                DPS_STATE_MEASURING -> {
+                    dpsTicksRemaining = (dpsTicksRemaining - 1).coerceAtLeast(0)
+                    if (dpsTicksRemaining == 0) {
+                        dpsTicksRemaining = DPS_RESULT_DURATION_TICKS
+                        dpsTestState = DPS_STATE_COOLDOWN
+                    }
                 }
-            }
-
-            else if (emEspera) {
-                timerModoEspera--
-                if (timerModoEspera <= 0) {
-                    emEspera = false
-                    accumulatedDamageInWindow = 0f
+                DPS_STATE_COOLDOWN -> {
+                    dpsTicksRemaining = (dpsTicksRemaining - 1).coerceAtLeast(0)
+                    if (dpsTicksRemaining == 0) {
+                        dpsTestState = DPS_STATE_READY
+                        dpsTotalDamage = 0f
+                        dpsHitCount = 0
+                        dpsHighestHit = 0f
+                    }
                 }
             }
         }
     }
 
     fun resetModoState() {
-        aticveModo = false
-        emEspera = false
-        timerModo = 0
-        timerModoEspera = 0
-        accumulatedDamageInWindow = 0f
-        //lastHitDamage = 0f
+        dpsTestState = DPS_STATE_READY
+        dpsTicksRemaining = 0
+        dpsTotalDamage = 0f
+        dpsHitCount = 0
+        dpsHighestHit = 0f
         damageData = DamageData()
         damageDataOld = DamageData()
     }
@@ -694,65 +663,29 @@ open class DummyEntity(
         get() = entityData.get(OPTIONAL_PROFILE).orElse(null)
         set(value) = entityData.set(OPTIONAL_PROFILE, Optional.ofNullable(value))
 
-    /*
-    var profilePlayer: ResolvableProfile?
-        get() {
-            val dummyTag = entityData.get(DUMMY_DATA)
-            if (!dummyTag.contains("ResolvableProfile")) return null
-            val profileTag = dummyTag.get("ResolvableProfile") ?: return null
-            return ResolvableProfile.CODEC
-                .parse(registryAccess().createSerializationContext(NbtOps.INSTANCE), profileTag)
-                .result()
-                .orElse(null)
-        }
-        set(value) {
-            val dummyTag = entityData.get(DUMMY_DATA).copy()
-            if (value != null) {
-                ResolvableProfile.CODEC
-                    .encodeStart(registryAccess().createSerializationContext(NbtOps.INSTANCE), value)
-                    .result()
-                    .ifPresent { tag ->
-                        dummyTag.put("ResolvableProfile", tag)
-                    }
-            } else {
-                dummyTag.remove("ResolvableProfile")
-            }
-            entityData.set(DUMMY_DATA, dummyTag)
-
-            if (value != null && !value.isResolved) {
-                value.resolve().thenAcceptAsync({ resolvedProfile ->
-                    // Ao resolver a skin na thread de fundo, atualiza para o perfil resolvido
-                    this.profilePlayer = resolvedProfile
-                }, net.minecraft.client.Minecraft.getInstance())
-            }
-        }
-
-     */
-
     fun setSkinByUsername(username: String?) {
 
-        if (this.level().isClientSide) {return}
+        val serverLevel = this.level() as? ServerLevel ?: return
 
-        if (username.isNullOrBlank()) {profilePlayer = null; return}
+        if (username.isNullOrBlank()) {
+            profilePlayer = null
+            return
+        }
 
-        if(profilePlayer?.name?.map { it.equals(username,true) }?.orElse(false) ?: false){return}
+        if (profilePlayer?.name?.map { it.equals(username, true) }?.orElse(false) ?: false) return
 
-        /*
-        val unresolvedProfile = ResolvableProfile(
-            Optional.of(username),
-            Optional.empty(),
-            PropertyMap()
-        )
-        unresolvedProfile.resolve().thenAcceptAsync({ resolvedProfile ->
-            if (resolvedProfile != null) {
-                this.profilePlayer = resolvedProfile
-            }
-        }, net.minecraft.Util.backgroundExecutor())
-        */
+        profilePlayer = null
 
         SkullBlockEntity.fetchGameProfile(username).thenAccept { profileOpt ->
-            profileOpt.ifPresent { profile ->
-                this.profilePlayer = ResolvableProfile(profile)
+            serverLevel.server.execute {
+                if (isRemoved || level() !== serverLevel ||
+                    !customName?.string.equals(username, ignoreCase = true)
+                ) {
+                    return@execute
+                }
+                profileOpt.ifPresent { profile ->
+                    profilePlayer = ResolvableProfile(profile)
+                }
             }
         }
 
@@ -765,43 +698,51 @@ open class DummyEntity(
     override fun addAdditionalSaveData(compoundTag: CompoundTag) {
         super.addAdditionalSaveData(compoundTag)
 
-        compoundTag.remove("DummyInventory")
-        compoundTag.put("DummyInventory", dummyInventory.serializeNBT(level().registryAccess()))
-        compoundTag.merge(entityData.get(DUMMY_DATA))
-        // compoundTag.putString("trainingModo",trainingModo.name)
+        compoundTag.remove(LEGACY_DUMMY_INVENTORY_TAG)
+        compoundTag.put(DUMMY_INVENTORY_TAG, dummyInventory.serializeNBT(level().registryAccess()))
+
         val registryContext = registryAccess().createSerializationContext(NbtOps.INSTANCE)
 
-        ResolvableProfile.CODEC.encodeStart(registryContext, this.profilePlayer)
-            .result()
-            .ifPresent { profileTag ->
-                compoundTag.put("ProfilePlayer", profileTag)
-            }
+        compoundTag.remove(LEGACY_PROFILE_TAG)
+        compoundTag.remove(PROFILE_TAG)
+        profilePlayer?.let { profile ->
+            ResolvableProfile.CODEC.encodeStart(registryContext, profile)
+                .result()
+                .ifPresent { profileTag ->
+                    compoundTag.put(PROFILE_TAG, profileTag)
+                }
+        }
 
     }
 
     override fun readAdditionalSaveData(compoundTag: CompoundTag) {
         super.readAdditionalSaveData(compoundTag)
 
-        if (compoundTag.contains("DummyInventory")) {
-            dummyInventory.deserializeNBT(level().registryAccess(), compoundTag.getCompound("DummyInventory"))
-            setItemSlot(EquipmentSlot.HEAD, dummyInventory.getStackInSlot(0))
-            setItemSlot(EquipmentSlot.CHEST, dummyInventory.getStackInSlot(1))
-            setItemSlot(EquipmentSlot.LEGS, dummyInventory.getStackInSlot(2))
-            setItemSlot(EquipmentSlot.FEET, dummyInventory.getStackInSlot(3))
-            setItemSlot(EquipmentSlot.MAINHAND, dummyInventory.getStackInSlot(5))
-            setItemSlot(EquipmentSlot.OFFHAND, dummyInventory.getStackInSlot(6))
-
-            val stack =  dummyInventory.getStackInSlot(4)
-            trainingModo = TrainingModuleItem.getItemMode(stack)
-
-            compoundTag.remove("DummyInventory")
+        val inventoryTag = when {
+            compoundTag.contains(DUMMY_INVENTORY_TAG) -> compoundTag.getCompound(DUMMY_INVENTORY_TAG)
+            compoundTag.contains(LEGACY_DUMMY_INVENTORY_TAG) -> compoundTag.getCompound(LEGACY_DUMMY_INVENTORY_TAG)
+            else -> null
         }
-        //trainingModo = TrainingModuleItem.TrainingModos.fromString(compoundTag.getString("trainingModo"))
-        entityData.set(DUMMY_DATA, compoundTag.copy())
+        if (inventoryTag != null) {
+            dummyInventory.deserializeNBT(level().registryAccess(), inventoryTag)
+            for (inventorySlot in 0 until dummyInventory.slots) {
+                equipmentSlotForInventorySlot(inventorySlot)?.let { equipmentSlot ->
+                    setItemSlot(equipmentSlot, dummyInventory.getStackInSlot(inventorySlot))
+                }
+            }
+        }
+
+        syncTrainingModuleConfig(dummyInventory.getStackInSlot(TRAINING_MODULE_SLOT))
 
         val registryContext = registryAccess().createSerializationContext(NbtOps.INSTANCE)
-        if (compoundTag.contains("ProfilePlayer")) {
-            ResolvableProfile.CODEC.parse(registryContext, compoundTag.get("ProfilePlayer"))
+        profilePlayer = null
+        val profileTag = when {
+            compoundTag.contains(PROFILE_TAG) -> compoundTag.get(PROFILE_TAG)
+            compoundTag.contains(LEGACY_PROFILE_TAG) -> compoundTag.get(LEGACY_PROFILE_TAG)
+            else -> null
+        }
+        if (profileTag != null) {
+            ResolvableProfile.CODEC.parse(registryContext, profileTag)
                 .result()
                 .ifPresent { profile ->
                     this.profilePlayer = profile
@@ -809,6 +750,18 @@ open class DummyEntity(
         }
 
     }
+
+    private fun equipmentSlotForInventorySlot(inventorySlot: Int): EquipmentSlot? =
+        when (inventorySlot) {
+            HEAD_INVENTORY_SLOT -> EquipmentSlot.HEAD
+            CHEST_INVENTORY_SLOT -> EquipmentSlot.CHEST
+            LEGS_INVENTORY_SLOT -> EquipmentSlot.LEGS
+            FEET_INVENTORY_SLOT -> EquipmentSlot.FEET
+            MAIN_HAND_INVENTORY_SLOT -> EquipmentSlot.MAINHAND
+            OFF_HAND_INVENTORY_SLOT -> EquipmentSlot.OFFHAND
+            else -> null
+        }
+
 
     // ========================================================================
     // COMPANION OBJECT & ATRIBUTOS
@@ -818,6 +771,23 @@ open class DummyEntity(
 
         val DISPLAY_TICKS: EntityDataAccessor<Int> =
             SynchedEntityData.defineId(DummyEntity::class.java, EntityDataSerializers.INT)
+
+        val DPS_TEST_STATE: EntityDataAccessor<Int> =
+            SynchedEntityData.defineId(DummyEntity::class.java, EntityDataSerializers.INT)
+        val DPS_TICKS_REMAINING: EntityDataAccessor<Int> =
+            SynchedEntityData.defineId(DummyEntity::class.java, EntityDataSerializers.INT)
+        val DPS_TOTAL_DAMAGE: EntityDataAccessor<Float> =
+            SynchedEntityData.defineId(DummyEntity::class.java, EntityDataSerializers.FLOAT)
+        val DPS_HIT_COUNT: EntityDataAccessor<Int> =
+            SynchedEntityData.defineId(DummyEntity::class.java, EntityDataSerializers.INT)
+        val DPS_HIGHEST_HIT: EntityDataAccessor<Float> =
+            SynchedEntityData.defineId(DummyEntity::class.java, EntityDataSerializers.FLOAT)
+
+        const val DPS_STATE_READY = 0
+        const val DPS_STATE_MEASURING = 1
+        const val DPS_STATE_COOLDOWN = 2
+        const val DPS_TEST_DURATION_TICKS = 100
+        const val DPS_RESULT_DURATION_TICKS = 60
 
         val DAMAGE_DATA : EntityDataAccessor<DamageData> =
             SynchedEntityData.defineId(DummyEntity::class.java, ModDataSerializers.DAMAGE_DATA)
@@ -833,13 +803,27 @@ open class DummyEntity(
         val MACE_DAMAGE: EntityDataAccessor<Float> = SynchedEntityData.defineId(DummyEntity::class.java, EntityDataSerializers.FLOAT)
         val MACE_HIT_TRIGGER: EntityDataAccessor<Int> = SynchedEntityData.defineId(DummyEntity::class.java, EntityDataSerializers.INT)
 
-        val DUMMY_DATA: EntityDataAccessor<CompoundTag> =
-            SynchedEntityData.defineId(DummyEntity::class.java, EntityDataSerializers.COMPOUND_TAG)
-
-        //val MODO_TREINO: EntityDataAccessor<String> = SynchedEntityData.defineId(DummyEntity::class.java, EntityDataSerializers.STRING)
-
         val OPTIONAL_PROFILE: EntityDataAccessor<Optional<ResolvableProfile>> =
             SynchedEntityData.defineId(DummyEntity::class.java, ModDataSerializers.OPTIONAL_RESOLVABLE_PROFILE)
+
+        val TRAINING_CONFIG_DATA: EntityDataAccessor<TrainingModuleConfig> =
+            SynchedEntityData.defineId(DummyEntity::class.java, TrainingModuleConfig.TRAINING_MODULE_CONFIG)
+
+        val DAMAGE_ITEMSTACK : EntityDataAccessor<ItemStack> = SynchedEntityData.defineId(DummyEntity::class.java, EntityDataSerializers.ITEM_STACK)
+        val DAMAGE_ITEMSTACK_OLD : EntityDataAccessor<ItemStack> = SynchedEntityData.defineId(DummyEntity::class.java, EntityDataSerializers.ITEM_STACK)
+
+
+        private const val HEAD_INVENTORY_SLOT = 0
+        private const val CHEST_INVENTORY_SLOT = 1
+        private const val LEGS_INVENTORY_SLOT = 2
+        private const val FEET_INVENTORY_SLOT = 3
+        private const val TRAINING_MODULE_SLOT = 4
+        private const val MAIN_HAND_INVENTORY_SLOT = 5
+        private const val OFF_HAND_INVENTORY_SLOT = 6
+        private const val DUMMY_INVENTORY_TAG = "trainingdummy:DummyInventory"
+        private const val PROFILE_TAG = "trainingdummy:ProfilePlayer"
+        private const val LEGACY_DUMMY_INVENTORY_TAG = "DummyInventory"
+        private const val LEGACY_PROFILE_TAG = "ProfilePlayer"
 
 
         fun createAttributes(): AttributeSupplier.Builder {

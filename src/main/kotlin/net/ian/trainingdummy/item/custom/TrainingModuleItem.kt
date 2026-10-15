@@ -1,6 +1,9 @@
 package net.ian.trainingdummy.item.custom
 
+import net.ian.trainingdummy.init.components.ModDataComponents
+import net.ian.trainingdummy.init.components.TrainingModuleConfig
 import net.ian.trainingdummy.init.enums.TrainingModos
+import net.ian.trainingdummy.item.ModItems
 import net.minecraft.core.component.DataComponents
 import net.minecraft.world.item.Item
 import net.minecraft.world.item.ItemStack
@@ -16,18 +19,24 @@ class TrainingModuleItem (properties: Properties) : Item(properties) {
         const val MODE_KEY = "training_mode"
 
         fun setItemMode(stack: ItemStack, mode: TrainingModos) : ItemStack {
-            CustomData.update(DataComponents.CUSTOM_DATA, stack) { tag ->
-                tag.putString(MODE_KEY, mode.name)
-            }
+            val config = stack.getOrDefault(
+                ModDataComponents.TRAINING_MODULE_CONFIG,
+                TrainingModuleConfig()
+            )
+            stack.set(
+                ModDataComponents.TRAINING_MODULE_CONFIG,
+                config.copy(trainingModo = mode)
+            )
             return stack
         }
 
-        fun getItemMode(stack: ItemStack): TrainingModos {
-            val customData = stack.get(DataComponents.CUSTOM_DATA) ?: return TrainingModos.DEFAULT
-            val tag = customData.copyTag()
-
-            if (!tag.contains(MODE_KEY)) return TrainingModos.DEFAULT
-            return TrainingModos.fromString(tag.getString(MODE_KEY))
+        fun getItemTrainingMode(stack: ItemStack) : TrainingModos? {
+            if(!stack.`is`(ModItems.TRAINING_MODULE_ITEM)){return null}
+            return stack.getOrDefault(ModDataComponents.TRAINING_MODULE_CONFIG, TrainingModuleConfig()).trainingModo
+        }
+        fun getItemTrainingModuleConfig(stack: ItemStack) : TrainingModuleConfig? {
+            if(!stack.`is`(ModItems.TRAINING_MODULE_ITEM)){return null}
+            return stack.getOrDefault(ModDataComponents.TRAINING_MODULE_CONFIG, TrainingModuleConfig())
         }
     }
 }
