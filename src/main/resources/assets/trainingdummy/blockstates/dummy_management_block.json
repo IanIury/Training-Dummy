@@ -1,0 +1,7 @@
+{
+  "variants": {
+    "": {
+      "model": "trainingdummy:block/dummy_management_block"
+    }
+  }
+}

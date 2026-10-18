@@ -1,0 +1,25 @@
+package net.ian.trainingdummy.block.entityblock
+
+enum class DummyManagementAction {
+    NEXT_MODE,
+    SET_VALUE,
+    TOGGLE_OUTPUT_INVERSION,
+    MAX_HEALTH_DOWN,
+    MAX_HEALTH_UP,
+    DURATION_DOWN,
+    DURATION_UP,
+    RESET_DOWN,
+    RESET_UP,
+    TOGGLE_REGEN,
+    REGEN_RATE_DOWN,
+    REGEN_RATE_UP,
+    TOGGLE_TIMED_OUTPUT,
+    TARGET_AVERAGE_DOWN,
+    TARGET_AVERAGE_UP,
+    TARGET_DAMAGE_DOWN,
+    TARGET_DAMAGE_UP,
+    TARGET_HITS_DOWN,
+    TARGET_HITS_UP,
+    DPS_WINDOW_DOWN,
+    DPS_WINDOW_UP
+}
