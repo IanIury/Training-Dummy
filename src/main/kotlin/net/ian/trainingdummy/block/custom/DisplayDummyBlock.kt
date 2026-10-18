@@ -4,9 +4,6 @@ import com.mojang.serialization.MapCodec
 import net.ian.trainingdummy.block.entityblock.DisplayDummyBlockEntity
 import net.minecraft.core.BlockPos
 import net.minecraft.core.Direction
-import net.minecraft.network.chat.Component
-import net.minecraft.world.InteractionHand
-import net.minecraft.world.ItemInteractionResult
 import net.minecraft.world.entity.item.ItemEntity
 import net.minecraft.world.entity.player.Player
 import net.minecraft.world.item.ItemStack
@@ -22,10 +19,10 @@ import net.minecraft.world.level.block.state.properties.AttachFace
 import net.minecraft.world.level.block.state.properties.BlockStateProperties
 import net.minecraft.world.level.block.state.properties.DirectionProperty
 import net.minecraft.world.level.block.state.properties.EnumProperty
-import net.minecraft.world.phys.BlockHitResult
 import net.minecraft.world.phys.shapes.CollisionContext
 import net.minecraft.world.phys.shapes.Shapes
 import net.minecraft.world.phys.shapes.VoxelShape
+import net.minecraft.world.phys.Vec3
 
 class DisplayDummyBlock(properties: Properties) : BaseEntityBlock(properties) {
 
@@ -76,6 +73,49 @@ class DisplayDummyBlock(properties: Properties) : BaseEntityBlock(properties) {
             }
 
             return shape
+        }
+
+        fun getProjectionSurface(state: BlockState): Pair<Vec3, Direction> {
+            var shape = TOP_SHAPE
+            val face = state.getValue(FACE)
+            val facing = state.getValue(FACING)
+
+            shape = when (face) {
+                AttachFace.CEILING -> rotateVoxel(shape, Direction.DOWN)
+                AttachFace.WALL -> rotateVoxel(shape, Direction.NORTH)
+                AttachFace.FLOOR -> shape
+            }
+
+            val steps = when (facing) {
+                Direction.SOUTH -> 2
+                Direction.WEST -> 3
+                Direction.EAST -> 1
+                else -> 0
+            }
+            repeat(steps) { shape = rotateY(shape) }
+
+            val bounds = shape.bounds()
+            val center = Vec3(
+                (bounds.minX + bounds.maxX) / 2.0,
+                (bounds.minY + bounds.maxY) / 2.0,
+                (bounds.minZ + bounds.maxZ) / 2.0
+            )
+            val normal = when (face) {
+                AttachFace.FLOOR -> Direction.UP
+                AttachFace.CEILING -> Direction.DOWN
+                AttachFace.WALL -> facing
+            }
+            val halfExtent = when (normal.axis) {
+                Direction.Axis.X -> (bounds.maxX - bounds.minX) / 2.0
+                Direction.Axis.Y -> (bounds.maxY - bounds.minY) / 2.0
+                Direction.Axis.Z -> (bounds.maxZ - bounds.minZ) / 2.0
+            }
+            val surfaceCenter = center.add(
+                normal.stepX * halfExtent,
+                normal.stepY * halfExtent,
+                normal.stepZ * halfExtent
+            )
+            return surfaceCenter to normal
         }
 
         private fun rotateY(shape: VoxelShape): VoxelShape {
@@ -145,21 +185,6 @@ class DisplayDummyBlock(properties: Properties) : BaseEntityBlock(properties) {
 
     override fun newBlockEntity(blockPos: BlockPos, state: BlockState): BlockEntity? {
         return DisplayDummyBlockEntity(blockPos, state)
-    }
-
-    override fun useItemOn(
-        stack: ItemStack,
-        state: BlockState,
-        level: Level,
-        pos: BlockPos,
-        player: Player,
-        hand: InteractionHand,
-        hitResult: BlockHitResult
-    ): ItemInteractionResult {
-        if(level.isClientSide){return ItemInteractionResult.SUCCESS}
-        val blockEntity = level.getBlockEntity(pos) as? DisplayDummyBlockEntity ?: return ItemInteractionResult.SUCCESS
-        player.sendSystemMessage(Component.literal("[UUID Dummy: ${blockEntity.target_entity_uuid.toString()}]"))
-        return ItemInteractionResult.SUCCESS
     }
 
     override fun playerWillDestroy(level: Level, pos: BlockPos, state: BlockState, player: Player): BlockState {

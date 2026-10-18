@@ -21,6 +21,8 @@ object ModCreativeModelTabs {
             .displayItems { parameters, output ->
                 output.accept { ModItems.DUMMY_ITEM_SPAWN }
                 output.accept(ModBlocks.DISPLAY_DUMMY_BLOCK)
+                output.accept(ModBlocks.DUMMY_MANAGEMENT_BLOCK)
+                output.accept (ModItems.TRAINING_MODULE_ITEM)
             }.build()
     }
 

@@ -1,6 +1,5 @@
 package net.ian.trainingdummy.entity
 
-import net.ian.trainingdummy.client.modernUi.ui.DummyScreen
 import net.ian.trainingdummy.entity.animation.DummyHitAnimationState
 import net.ian.trainingdummy.entity.animation.DummyMaceAnimationState
 import net.ian.trainingdummy.entity.part.DummyPartEntity
@@ -9,7 +8,6 @@ import net.ian.trainingdummy.init.components.ModDataComponents
 import net.ian.trainingdummy.init.components.TrainingModuleConfig
 import net.ian.trainingdummy.init.enums.TrainingModos
 import net.ian.trainingdummy.init.serializers.ModDataSerializers
-import net.ian.trainingdummy.init.serializers.ModDataSerializersRegistry
 import net.ian.trainingdummy.item.ModItems
 import net.ian.trainingdummy.item.custom.DisplayDummyBlockItem
 import net.ian.trainingdummy.item.custom.TrainingModuleItem
@@ -84,6 +82,10 @@ open class DummyEntity(
         get() = entityData.get(DAMAGE_DATA)
         set(value) = entityData.set(DAMAGE_DATA, value)
 
+    var detailedDamageWindow: Boolean
+        get() = entityData.get(DETAILED_DAMAGE_WINDOW)
+        set(value) = entityData.set(DETAILED_DAMAGE_WINDOW, value)
+
     var preDamageData: DamageData = DamageData()
 
     var damageStack : ItemStack
@@ -150,6 +152,7 @@ open class DummyEntity(
         builder.define(DPS_TOTAL_DAMAGE, 0f)
         builder.define(DPS_HIT_COUNT, 0)
         builder.define(DPS_HIGHEST_HIT, 0f)
+        builder.define(DETAILED_DAMAGE_WINDOW, false)
 
     }
 
@@ -210,15 +213,6 @@ open class DummyEntity(
                         maceAnimation.maceScaleSizeSmooth = true
                     }
                     maceAnimation.start(tickCount)
-                }
-                OPTIONAL_PROFILE -> {
-                    profilePlayer?.let {currentProfile ->
-                        if (!currentProfile.isResolved) {
-                            currentProfile.resolve().thenAcceptAsync({ resolved ->
-                                this.profilePlayer = resolved
-                            }, net.minecraft.client.Minecraft.getInstance())
-                        }
-                    }
                 }
             }
         }
@@ -442,7 +436,20 @@ open class DummyEntity(
 
     override fun setCustomName(name: Component?) {
         super.setCustomName(name)
-        name?.also { setSkinByUsername(it.string) } ?: run {profilePlayer = null}
+        name?.also {
+            val nameText = it.string
+            if (
+                nameText.equals("jeb_", ignoreCase = true) ||
+                nameText.equals("-endGateway-", ignoreCase = true) ||
+                nameText.equals("-entityGlint-", ignoreCase = true) ||
+                nameText.equals("-translucent-", ignoreCase = true)
+            ) {
+                profilePlayer = null
+            } else {
+                setSkinByUsername(nameText)
+            }
+        }
+            ?: run { profilePlayer = null }
     }
 
     fun interactWithHandSlot(player: Player, hand: InteractionHand, slot: EquipmentSlot): InteractionResult {
@@ -459,7 +466,6 @@ open class DummyEntity(
     fun interactBaseDummy(player: Player, hand: InteractionHand) : InteractionResult {
 
         if (level().isClientSide) {
-            DummyScreen.open()
             return InteractionResult.sidedSuccess(true)
         }
 
@@ -602,6 +608,7 @@ open class DummyEntity(
             }
 
             TrainingModos.COMPARISON -> {
+                damageDataOld = damageData
                 this.damageData = incomingData
             }
         }
@@ -700,6 +707,7 @@ open class DummyEntity(
 
         compoundTag.remove(LEGACY_DUMMY_INVENTORY_TAG)
         compoundTag.put(DUMMY_INVENTORY_TAG, dummyInventory.serializeNBT(level().registryAccess()))
+        compoundTag.putBoolean(DETAILED_DAMAGE_WINDOW_TAG, detailedDamageWindow)
 
         val registryContext = registryAccess().createSerializationContext(NbtOps.INSTANCE)
 
@@ -717,6 +725,7 @@ open class DummyEntity(
 
     override fun readAdditionalSaveData(compoundTag: CompoundTag) {
         super.readAdditionalSaveData(compoundTag)
+        detailedDamageWindow = compoundTag.getBoolean(DETAILED_DAMAGE_WINDOW_TAG)
 
         val inventoryTag = when {
             compoundTag.contains(DUMMY_INVENTORY_TAG) -> compoundTag.getCompound(DUMMY_INVENTORY_TAG)
@@ -811,6 +820,8 @@ open class DummyEntity(
 
         val DAMAGE_ITEMSTACK : EntityDataAccessor<ItemStack> = SynchedEntityData.defineId(DummyEntity::class.java, EntityDataSerializers.ITEM_STACK)
         val DAMAGE_ITEMSTACK_OLD : EntityDataAccessor<ItemStack> = SynchedEntityData.defineId(DummyEntity::class.java, EntityDataSerializers.ITEM_STACK)
+        val DETAILED_DAMAGE_WINDOW: EntityDataAccessor<Boolean> =
+            SynchedEntityData.defineId(DummyEntity::class.java, EntityDataSerializers.BOOLEAN)
 
 
         private const val HEAD_INVENTORY_SLOT = 0
@@ -821,6 +832,7 @@ open class DummyEntity(
         private const val MAIN_HAND_INVENTORY_SLOT = 5
         private const val OFF_HAND_INVENTORY_SLOT = 6
         private const val DUMMY_INVENTORY_TAG = "trainingdummy:DummyInventory"
+        private const val DETAILED_DAMAGE_WINDOW_TAG = "trainingdummy:DetailedDamageWindow"
         private const val PROFILE_TAG = "trainingdummy:ProfilePlayer"
         private const val LEGACY_DUMMY_INVENTORY_TAG = "DummyInventory"
         private const val LEGACY_PROFILE_TAG = "ProfilePlayer"

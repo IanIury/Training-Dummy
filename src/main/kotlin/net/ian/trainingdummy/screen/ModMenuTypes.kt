@@ -2,6 +2,7 @@ package net.ian.trainingdummy.screen
 
 import net.ian.trainingdummy.TrainingDummy
 import net.ian.trainingdummy.screen.custom.DummyMenu
+import net.ian.trainingdummy.screen.custom.DummyManagementMenu
 import net.minecraft.core.registries.Registries
 import net.minecraft.world.inventory.MenuType
 import net.neoforged.bus.api.IEventBus
@@ -21,6 +22,13 @@ object ModMenuTypes {
             DummyMenu(containerId, playerInventory, extraData)
         }
     })
+
+    val DUMMY_MANAGEMENT_MENU: DeferredHolder<MenuType<*>, MenuType<DummyManagementMenu>> =
+        MENUS.register("dummy_management_menu", Supplier {
+            IMenuTypeExtension.create { containerId, playerInventory, extraData ->
+                DummyManagementMenu(containerId, playerInventory, extraData)
+            }
+        })
 
 
     fun register(eventBus: IEventBus){MENUS.register(eventBus)}

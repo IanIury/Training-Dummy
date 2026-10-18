@@ -4,6 +4,7 @@
 	"texture_size": [32, 32],
 	"textures": {
 		"0": "trainingdummy:block/dummy_display",
+		"missing": "trainingdummy:block/dummy_display",
 		"particle": "trainingdummy:block/dummy_display"
 	},
 	"elements": [

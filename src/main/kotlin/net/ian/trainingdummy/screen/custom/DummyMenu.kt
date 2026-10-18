@@ -1,6 +1,7 @@
 package net.ian.trainingdummy.screen.custom
 
 import net.ian.trainingdummy.entity.DummyEntity
+import net.ian.trainingdummy.item.ModItems
 import net.ian.trainingdummy.screen.ModMenuTypes
 import net.minecraft.network.FriendlyByteBuf
 import net.minecraft.world.entity.player.Inventory
@@ -31,10 +32,10 @@ class DummyMenu(
             for (i in 0 until 4) {
                 this.addSlot(SlotItemHandler(dummy.dummyInventory, i, 8, 8 + i * 18))
             }
-            this.addSlot(SlotItemHandler(dummy.dummyInventory, 4, 115, 30))
+            this.addSlot(trainingModuleSlot(dummy.dummyInventory))
 
             this.addSlot(SlotItemHandler(dummy.dummyInventory, 5, 79, 62))
-            this.addSlot(SlotItemHandler(dummy.dummyInventory, 6, 97, 62))
+            this.addSlot(SlotItemHandler(dummy.dummyInventory, 6, 98, 62))
 
         }else {
             // Fallback caso o Dummy seja nulo no cliente temporariamente
@@ -43,10 +44,10 @@ class DummyMenu(
                 this.addSlot(SlotItemHandler(dummyInventory, i, 8, 8 + i * 18))
             }
 
-            this.addSlot(SlotItemHandler(dummyInventory, 4, 115, 30))
+            this.addSlot(trainingModuleSlot(dummyInventory))
 
             this.addSlot(SlotItemHandler(dummyInventory, 5, 79, 62))
-            this.addSlot(SlotItemHandler(dummyInventory, 6, 97, 62))
+            this.addSlot(SlotItemHandler(dummyInventory, 6, 98, 62))
 
         }
 
@@ -82,6 +83,7 @@ class DummyMenu(
 
         private const val DUMMY_FIRST_SLOT_INDEX = 0
         private const val VANILLA_FIRST_SLOT_INDEX = DUMMY_FIRST_SLOT_INDEX + DUMMY_SLOT_COUNT
+
     }
 
     override fun quickMoveStack(player: Player, index: Int): ItemStack {
@@ -122,4 +124,11 @@ class DummyMenu(
     fun hasUpgrade(): Boolean {
         return dummy?.let { !it.dummyInventory.getStackInSlot(4).isEmpty } ?: false
     }
+
+    private fun trainingModuleSlot(inventory: ItemStackHandler): SlotItemHandler =
+        object : SlotItemHandler(inventory, 4, 152, 62) {
+            override fun mayPlace(stack: ItemStack): Boolean =
+                stack.`is`(ModItems.TRAINING_MODULE_ITEM)
+        }
+
 }

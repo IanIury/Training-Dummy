@@ -1,6 +1,7 @@
 {
-  "parent" : "minecraft:block/generated",
+  "parent": "minecraft:block/cube_all",
   "textures": {
-    "layer0": "trainingdummy:block/training_module_item_texture"
+    "all": "trainingdummy:block/dummy_management_block",
+    "particle": "trainingdummy:block/dummy_management_block"
   }
 }

@@ -19,9 +19,7 @@ class DummyItemRenderer : BlockEntityWithoutLevelRenderer(
     Minecraft.getInstance().entityModels
 ) {
     private var dummyCache: DummyEntity? = null
-    private var isRendering: Boolean = false
-
-    //private var lastRenderedStack: ItemStack = ItemStack.EMPTY
+    private var renderDepth = 0
 
     override fun renderByItem(
         stack: ItemStack,
@@ -32,19 +30,20 @@ class DummyItemRenderer : BlockEntityWithoutLevelRenderer(
         packedOverlay: Int
     ) {
         val level = Minecraft.getInstance().level ?: return
+        if (renderDepth >= MAX_RENDER_DEPTH) return
 
-        val dummyToRender = if(isRendering) {
-            DummyEntity(ModEntities.DUMMY.get(), level)
-        } else {
-            if (dummyCache == null || dummyCache?.level() != level) {
-                dummyCache = DummyEntity(ModEntities.DUMMY.get(), level)
-            }
-            dummyCache!!
-        }
-        val previousRenderingState = isRendering
-        isRendering = true
-
+        val previousRenderDepth = renderDepth
+        renderDepth++
+        var posePushed = false
         try {
+            val dummyToRender = if (previousRenderDepth > 0) {
+                DummyEntity(ModEntities.DUMMY.get(), level)
+            } else {
+                if (dummyCache == null || dummyCache?.level() != level) {
+                    dummyCache = DummyEntity(ModEntities.DUMMY.get(), level)
+                }
+                dummyCache!!
+            }
 
             val profileOnItem = stack.get(DataComponents.PROFILE)
             if (dummyToRender.profilePlayer != profileOnItem) {
@@ -52,6 +51,7 @@ class DummyItemRenderer : BlockEntityWithoutLevelRenderer(
             }
             applyEquipmentSafely(dummyToRender, stack)
             poseStack.pushPose()
+            posePushed = true
 
             applyPoseStackTransforms(displayContext, poseStack)
 
@@ -62,11 +62,9 @@ class DummyItemRenderer : BlockEntityWithoutLevelRenderer(
                 0.0f, 1.0f,
                 poseStack, buffer, packedLight
             )
-
-            poseStack.popPose()
-
         } finally {
-            isRendering = previousRenderingState
+            if (posePushed) poseStack.popPose()
+            renderDepth = previousRenderDepth
         }
 
     }
@@ -128,4 +126,7 @@ class DummyItemRenderer : BlockEntityWithoutLevelRenderer(
 
     }
 
+    companion object {
+        private const val MAX_RENDER_DEPTH = 3
+    }
 }

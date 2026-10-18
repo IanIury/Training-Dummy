@@ -8,6 +8,7 @@ import net.ian.trainingdummy.client.layer.DummyElytraLayer
 import net.ian.trainingdummy.client.layer.DummyFaceLayer
 import net.ian.trainingdummy.client.layer.DummyHumanoidArmorLayer
 import net.ian.trainingdummy.client.layer.DummyItemInHandLayer
+import net.ian.trainingdummy.client.layer.DummyOutlineLayer
 
 
 import net.ian.trainingdummy.client.model.DummyModel
@@ -15,31 +16,45 @@ import net.ian.trainingdummy.client.model.DummyModel
 import net.ian.trainingdummy.client.window.FloatingWindow
 import net.ian.trainingdummy.client.window.FloatingWindow.*
 import net.ian.trainingdummy.client.window.WindowAlignment
-import net.ian.trainingdummy.client.window.WindowColor
 import net.ian.trainingdummy.client.window.WindowColor.*
 import net.ian.trainingdummy.client.window.WindowElement
 import net.ian.trainingdummy.entity.DummyEntity
 import net.ian.trainingdummy.event.utils.DamageData
 import net.ian.trainingdummy.init.enums.TrainingModos
-import net.ian.trainingdummy.item.custom.TrainingModuleItem
 import net.minecraft.client.model.HumanoidModel
 import net.minecraft.client.model.geom.ModelLayers
 import net.minecraft.client.renderer.MultiBufferSource
 import net.minecraft.client.renderer.entity.EntityRendererProvider
 import net.minecraft.client.renderer.entity.HumanoidMobRenderer
+import net.minecraft.client.renderer.entity.ItemRenderer
+import net.minecraft.client.renderer.entity.layers.RenderLayer
 import net.minecraft.client.renderer.entity.layers.CustomHeadLayer
 import net.minecraft.client.renderer.entity.layers.ElytraLayer
 import net.minecraft.client.renderer.entity.layers.ItemInHandLayer
+import net.minecraft.core.Direction
 import net.minecraft.core.component.DataComponents
 import net.minecraft.network.chat.Component
+import net.minecraft.ChatFormatting
+import net.minecraft.client.renderer.RenderType
+import net.minecraft.client.renderer.entity.LivingEntityRenderer
 import net.minecraft.resources.ResourceLocation
+import net.minecraft.util.Mth
 import net.minecraft.world.item.ItemStack
 import net.minecraft.world.item.Items
 import net.minecraft.world.item.alchemy.PotionContents
 import net.minecraft.world.item.alchemy.Potions
-import java.awt.Color
 import java.util.Locale
 
+private const val COLOR_CYCLE_TICKS = 150f
+private const val COLOR_SATURATION = 0.9f
+
+data class DummyWindowProjection(
+    val x: Double,
+    val y: Double,
+    val z: Double,
+    val rightX: Double,
+    val rightZ: Double
+)
 
 class DummyRenderer(context: EntityRendererProvider.Context) : HumanoidMobRenderer<DummyEntity, DummyModel>(
     context,
@@ -49,21 +64,91 @@ class DummyRenderer(context: EntityRendererProvider.Context) : HumanoidMobRender
 
     init {
 
-        this.layers.removeIf { it is CustomHeadLayer<*, *>}
-        this.layers.removeIf { it is ItemInHandLayer<*, *>}
-        this.layers.removeIf { it is ElytraLayer<*, *>}
+        this.layers.removeIf { it is CustomHeadLayer<*, *> }
+        this.layers.removeIf { it is ItemInHandLayer<*, *> }
+        this.layers.removeIf { it is ElytraLayer<*, *> }
+
+        this.addLayer(JebColorLayer())
+        this.addLayer(NamedRenderEffectLayer())
 
         val innerArmor = HumanoidModel<DummyEntity>(context.bakeLayer(ModelLayers.PLAYER_INNER_ARMOR))
         val outerArmor = HumanoidModel<DummyEntity>(context.bakeLayer(ModelLayers.PLAYER_OUTER_ARMOR))
 
         this.addLayer(DummyHumanoidArmorLayer(this, innerArmor, outerArmor, context.modelManager))
-        this.addLayer(DummyItemInHandLayer(this,context.itemInHandRenderer))
+        this.addLayer(DummyItemInHandLayer(this, context.itemInHandRenderer))
         this.addLayer(DummyCustomHeadLayer(this, context.modelSet, context.itemInHandRenderer))
-        this.addLayer(DummyElytraLayer(this,context.modelSet))
-        this.addLayer(DummyFaceLayer(this,context.modelSet))
+        this.addLayer(DummyElytraLayer(this, context.modelSet))
+        this.addLayer(DummyFaceLayer(this, context.modelSet))
 
-        //this.addLayer(DummyGlowLayer(this))
         //this.addLayer(DummyOutlineLayer(this))
+    }
+
+    private inner class JebColorLayer : RenderLayer<DummyEntity, DummyModel>(this@DummyRenderer) {
+        override fun render(
+            poseStack: PoseStack,
+            buffer: MultiBufferSource,
+            packedLight: Int,
+            entity: DummyEntity,
+            limbSwing: Float,
+            limbSwingAmount: Float,
+            partialTick: Float,
+            ageInTicks: Float,
+            netHeadYaw: Float,
+            headPitch: Float
+        ) {
+            if (entity.customName?.string != "jeb_") return
+
+            val cycleProgress = (entity.tickCount + partialTick) / COLOR_CYCLE_TICKS
+            val hue = cycleProgress - kotlin.math.floor(cycleProgress)
+            val rgb = Mth.hsvToRgb(hue, COLOR_SATURATION, 1f)
+            val color = (0xFF shl 24) or (rgb and 0x00FFFFFF)
+            val model = parentModel
+            val vertexConsumer = ItemRenderer.getFoilBuffer(
+                buffer,
+                RenderType.entityTranslucentEmissive(getTextureLocation(entity)),
+                false,
+                true
+            )
+
+            model.renderToBuffer(
+                poseStack,
+                vertexConsumer,
+                packedLight,
+                LivingEntityRenderer.getOverlayCoords(entity, 0f),
+                color
+            )
+        }
+    }
+
+    private inner class NamedRenderEffectLayer : RenderLayer<DummyEntity, DummyModel>(this@DummyRenderer) {
+        override fun render(
+            poseStack: PoseStack,
+            buffer: MultiBufferSource,
+            packedLight: Int,
+            entity: DummyEntity,
+            limbSwing: Float,
+            limbSwingAmount: Float,
+            partialTick: Float,
+            ageInTicks: Float,
+            netHeadYaw: Float,
+            headPitch: Float
+        ) {
+            val effect = entity.customName?.string ?: return
+            val renderType = when {
+                effect.equals("-endGateway-", ignoreCase = true) -> RenderType.endGateway()
+                effect.equals("-entityGlint-", ignoreCase = true) -> RenderType.entityGlint()
+                effect.equals("-translucent-", ignoreCase = true) -> RenderType.translucent()
+                else -> return
+            }
+
+            parentModel.renderToBuffer(
+                poseStack,
+                buffer.getBuffer(renderType),
+                packedLight,
+                LivingEntityRenderer.getOverlayCoords(entity, 0f),
+                -1
+            )
+        }
     }
 
     // Textura da entidade (.png em assets/modid/textures/entity/dummy.png)
@@ -79,90 +164,105 @@ class DummyRenderer(context: EntityRendererProvider.Context) : HumanoidMobRender
         buffer: MultiBufferSource,
         packedLight: Int
     ) {
+
         super.render(entity, entityYaw, partialTicks, poseStack, buffer, packedLight)
 
-
-
         renderFloatingWindowModo(entity, partialTicks, poseStack, buffer, packedLight)
+
     }
 
 
-    private fun renderFloatingWindowModo(
-        entity: DummyEntity,
-        partialTicks: Float,
-        poseStack: PoseStack,
-        buffer: MultiBufferSource,
-        packedLight: Int
+    companion object {
+        fun renderFloatingWindowModo(
+            entity: DummyEntity,
+            partialTicks: Float,
+            poseStack: PoseStack,
+            buffer: MultiBufferSource,
+            packedLight: Int,
+            projection: DummyWindowProjection? = null
 
-    ) {
+        ) {
 
 
-        val modoAtual = entity.trainingModuleConfig.trainingModo
-        if (modoAtual != TrainingModos.DPS && entity.displayTicks <= 0) return
+            val modoAtual = entity.trainingModuleConfig.trainingModo
+            if (projection == null && modoAtual != TrainingModos.DPS && entity.displayTicks <= 0) return
 
-        val damageData = entity.damageData
-        val damageDataOld = entity.damageDataOld
+            val damageData = entity.damageData
+            val damageDataOld = entity.damageDataOld
 
-        val oldStack = entity.damageStackOld
-        val atualStack = entity.damageStack
 
-        val window = FloatingWindow.Builder()
+            val window = FloatingWindow.Builder()
 
-        when(modoAtual){
+            when (modoAtual) {
 
-            TrainingModos.DEFAULT -> {windowConfigDefault(window, entity)}
-            TrainingModos.DPS -> {
-                window.attachToEntityRotation(entity)
-                    .setOffset(0.9, 2.0, 0.0)
-                    .setAlignment(WindowAlignment.CENTER)
-                    .setPadding(2f)
-                    .setSize(38f, 30f, autoScaleContent = true, autoFitWidth = true, autoFitHeight = true)
-                    .setCornerRadius(3f)
-
-                    .setBorder(
-                        when (entity.dpsTestState) {
-                            DummyEntity.DPS_STATE_READY -> AnimatedGradient(
-                                argbStart = 0xFF65E8A0,
-                                argbEnd = 0xFF21B6A8,
-                                speed = 0.8f,
-                                scale = 0.8f
-                            )
-                            DummyEntity.DPS_STATE_COOLDOWN -> AnimatedGradient(
-                                argbStart = 0xFFFFB454,
-                                argbEnd = 0xFFFF5A5A,
-                                speed = 0.8f,
-                                scale = 0.8f
-                            )
-                            else -> AnimatedGradient(
-                                argbStart = 0xFFC5A5FB,
-                                argbEnd = 0xFF5700AC,
-                                speed = 1.2f,
-                                scale = 0.8f
-                            )
-                        },
-                        width = 0.75f
+                TrainingModos.DEFAULT -> {
+                    windowConfigDefault(
+                        window,
+                        entity,
+                        detailed = entity.detailedDamageWindow,
+                        projection = projection
                     )
-                    .setBackground(
-                        Gradient(
-                            argbStart = 0xF0181C2A,
-                            argbEnd = 0xF02B233D
-                        )
-                    )
-
-                val formatDamage: (Float) -> String = { value ->
-                    String.format(Locale.ROOT, "%.1f", value)
                 }
 
-                when (entity.dpsTestState) {
-                    DummyEntity.DPS_STATE_MEASURING -> {
-                        val remainingSeconds =
-                            (entity.dpsTicksRemaining - partialTicks.coerceIn(0f, 1f)).coerceAtLeast(0f) / 20f
-                        val elapsedTicks = DummyEntity.DPS_TEST_DURATION_TICKS - entity.dpsTicksRemaining
-                        val currentDps = if (elapsedTicks >= 20) {
-                            entity.dpsTotalDamage / (elapsedTicks / 20f)
-                        } else {
-                            null
-                        }
+                TrainingModos.DPS -> {
+                    if (projection == null) {
+                        window.attachToEntityRotation(entity).setOffset(0.9, 2.0, 0.0)
+                    } else {
+                        window.setFaceCamera(true)
+                            .setOffset(projection.x, projection.y, projection.z)
+                    }
+                    window
+                        .setAlignment(WindowAlignment.CENTER)
+                        .setPadding(2f)
+                        .setSize(38f, 30f, autoScaleContent = true, autoFitWidth = true, autoFitHeight = true)
+                        .setCornerRadius(3f)
+
+                        .setBorder(
+                            when (entity.dpsTestState) {
+                                DummyEntity.DPS_STATE_READY -> AnimatedGradient(
+                                    argbStart = 0xFF65E8A0,
+                                    argbEnd = 0xFF21B6A8,
+                                    speed = 0.8f,
+                                    scale = 0.8f
+                                )
+
+                                DummyEntity.DPS_STATE_COOLDOWN -> AnimatedGradient(
+                                    argbStart = 0xFFFFB454,
+                                    argbEnd = 0xFFFF5A5A,
+                                    speed = 0.8f,
+                                    scale = 0.8f
+                                )
+
+                                else -> AnimatedGradient(
+                                    argbStart = 0xFFC5A5FB,
+                                    argbEnd = 0xFF5700AC,
+                                    speed = 1.2f,
+                                    scale = 0.8f
+                                )
+                            },
+                            width = 0.75f
+                        )
+                        .setBackground(
+                            Gradient(
+                                argbStart = 0xF0181C2A,
+                                argbEnd = 0xF02B233D
+                            )
+                        )
+
+                    val formatDamage: (Float) -> String = { value ->
+                        String.format(Locale.ROOT, "%.1f", value)
+                    }
+
+                    when (entity.dpsTestState) {
+                        DummyEntity.DPS_STATE_MEASURING -> {
+                            val remainingSeconds =
+                                (entity.dpsTicksRemaining - partialTicks.coerceIn(0f, 1f)).coerceAtLeast(0f) / 20f
+                            val elapsedTicks = DummyEntity.DPS_TEST_DURATION_TICKS - entity.dpsTicksRemaining
+                            val currentDps = if (elapsedTicks >= 20) {
+                                entity.dpsTotalDamage / (elapsedTicks / 20f)
+                            } else {
+                                null
+                            }
 
                             window.addText(
                                 Component.translatable(
@@ -185,9 +285,9 @@ class DummyRenderer(context: EntityRendererProvider.Context) : HumanoidMobRender
                                     textScale = 0.9f,
                                     alignment = WindowElement.Text.TextAlignment.CENTER
                                 )
-                    }
+                        }
 
-                    DummyEntity.DPS_STATE_COOLDOWN -> {
+                        DummyEntity.DPS_STATE_COOLDOWN -> {
                             val averageHit = if (entity.dpsHitCount > 0) {
                                 entity.dpsTotalDamage / entity.dpsHitCount
                             } else {
@@ -224,9 +324,9 @@ class DummyRenderer(context: EntityRendererProvider.Context) : HumanoidMobRender
                                     textScale = 0.85f,
                                     alignment = WindowElement.Text.TextAlignment.CENTER
                                 )
-                    }
+                        }
 
-                    else -> {
+                        else -> {
                             window.addText(
                                 Component.translatable("message.trainingdummy.dps.ready"),
                                 color = 0xFFB7F7C5.toInt(),
@@ -234,94 +334,465 @@ class DummyRenderer(context: EntityRendererProvider.Context) : HumanoidMobRender
                                 textScale = 0.9f,
                                 alignment = WindowElement.Text.TextAlignment.CENTER
                             )
+                        }
                     }
                 }
-            }
-            TrainingModos.ACCUMULATED -> {
-                window.attachToEntityRotation(entity)
-                    .setOffset(0.6, 2.0, 0.0)
-                    .setSize(24f, 24f, autoScaleContent = true, autoFitWidth = true, autoFitHeight = true)
-                    .setAlignment(WindowAlignment.CENTER)
-                    .setCornerRadius(3f)
-                    .setPadding(1f)
-                    .setBorder(Rainbow(speed = 1.0f), width = 0.5f)
-                    .setBackground(Solid(0xDD000000))
 
-                    .addText(" • ${damageData.newDamage}")
-            }
-            TrainingModos.COMPARISON -> {
-                windowDefault(window, damageDataOld, entity)
-                window.addItemText(entity.damageStackOld, "  ${damageDataOld.newDamage}")
-                val window2 = Builder()
+                TrainingModos.ACCUMULATED -> {
+                    configureModeWindow(
+                        window,
+                        entity,
+                        Component.translatable("message.trainingdummy.accumulated_title"),
+                        projection = projection
+                    )
+                    window.addSeparator(color = modeWindowSeparator(), thickness = 0.5f, margin = 2f)
+                        .addText(
+                            Component.translatable(
+                                "message.trainingdummy.accumulated_value",
+                                String.format(Locale.ROOT, "%.1f", damageData.newDamage)
+                            ),
+                            color = Pulse(0xFF9BE7FF),
+                            shadow = true,
+                            textScale = 2.5f,
+                            alignment = WindowElement.Text.TextAlignment.CENTER
+                        )
+                }
 
-                windowDefault(window2,damageData, entity)
-                window2.setOffset(-0.6, 2.0, 0.0)
-                    .addItemText(entity.damageStack, "  ${damageData.newDamage}")
-                window2.build().render(poseStack, buffer, packedLight)//coloca nome (previous)
+                TrainingModos.COMPARISON -> {
+                    buildComparisonPanel(
+                        window,
+                        entity,
+                        Component.translatable("message.trainingdummy.previous"),
+                        entity.damageStackOld,
+                        damageDataOld.newDamage,
+                        offsetX = 0.8,
+                        projection = projection,
+                        projectionOffsetX = 0.35
+                    )
+
+                    val window2 = Builder()
+                    buildComparisonPanel(
+                        window2,
+                        entity,
+                        Component.translatable("message.trainingdummy.current"),
+                        entity.damageStack,
+                        damageData.newDamage,
+                        offsetX = -0.8,
+                        projection = projection,
+                        projectionOffsetX = -0.35
+                    )
+                    window2.build().render(poseStack, buffer, packedLight)
+
+                    val difference = damageData.newDamage - damageDataOld.newDamage
+                    val winnerStack = when {
+                        difference > 0.001f -> entity.damageStack
+                        difference < -0.001f -> entity.damageStackOld
+                        else -> ItemStack.EMPTY
+                    }
+                    val differenceColor = when {
+                        difference > 0.001f -> 0xFF75E6A5.toInt()
+                        difference < -0.001f -> 0xFFFF9A9A.toInt()
+                        else -> 0xFFFFD479.toInt()
+                    }
+                    val differenceWindow = Builder()
+                    configureModeWindow(
+                        differenceWindow,
+                        entity,
+                        Component.translatable("message.trainingdummy.comparison.title"),
+                        offsetY = 2.5,
+                        offsetX = 0.0,
+                        width = 28f,
+                        height = 22f,
+                        projection = projection,
+                        projectionOffsetY = 0.60
+                    )
+                    differenceWindow.addSeparator(color = modeWindowSeparator(), thickness = 0.5f, margin = 2f)
+                        .addText(
+                            Component.translatable(
+                                "message.trainingdummy.comparison.difference",
+                                "%+.1f".format(Locale.ROOT, difference)
+                            ),
+                            color = differenceColor,
+                            shadow = true,
+                            textScale = 1.5f,
+                            alignment = WindowElement.Text.TextAlignment.CENTER
+                        )
+                    if (winnerStack.isEmpty) {
+                        differenceWindow.addText(
+                            Component.translatable("message.trainingdummy.comparison.tie"),
+                            color = differenceColor,
+                            alignment = WindowElement.Text.TextAlignment.CENTER
+                        )
+                    } else {
+                        differenceWindow.addItemText(
+                            winnerStack,
+                            Component.translatable("message.trainingdummy.comparison.best_damage"),
+                            color = differenceColor,
+                            itemSize = 18f,
+                            textScale = 0.8f,
+                            alignment = WindowElement.Text.TextAlignment.CENTER
+                        )
+                    }
+                    differenceWindow.build().render(poseStack, buffer, packedLight)
+                }
+
+                //null -> {return}
             }
 
-            //null -> {return}
+            window.build().render(poseStack, buffer, packedLight)
+
         }
 
-        window.build().render(poseStack, buffer, packedLight)
-
-    }
-
-    private val armorHudIcon = ResourceLocation.fromNamespaceAndPath(
-        "minecraft",
-        "textures/gui/sprites/hud/armor_full.png"
-    )
-
-    private val absorptionHudIcon = ResourceLocation.fromNamespaceAndPath(
-        "minecraft",
-        "textures/gui/sprites/hud/heart/absorbing_full.png"
-    )
-
-    private val enchantItem = Items.ENCHANTED_BOOK.defaultInstance
-    private val potionItem = Items.POTION.defaultInstance.also {
-        it.set(
-            DataComponents.POTION_CONTENTS,
-            PotionContents(Potions.HEALING)
+        private val armorHudIcon = ResourceLocation.fromNamespaceAndPath(
+            "minecraft",
+            "textures/gui/sprites/hud/armor_full.png"
         )
-    }
-    private val innateResistanceItem = Items.STRUCTURE_VOID.defaultInstance
-    private val invulnerabilityItem = Items.BARRIER.defaultInstance
 
+        private val absorptionHudIcon = ResourceLocation.fromNamespaceAndPath(
+            "minecraft",
+            "textures/gui/sprites/hud/heart/absorbing_full.png"
+        )
 
-
-
-    private fun windowConfigDefault(window : FloatingWindow.Builder, entity : DummyEntity, detailed : Boolean = false){
-        val damageData = entity.damageData
-        window.attachToEntityRotation(entity)
-            .setOffset(0.9, 2.0, 0.0)
-            .setSize(30f, 30f, autoScaleContent = true, autoFitWidth = true, autoFitHeight = true)
-            .setAlignment(WindowAlignment.CENTER)
-            .setPadding(3f)
-
-            .setBorder(
-                AnimatedGradient(
-                    argbStart = 0xC5A5FB,
-                    argbEnd = 0x5700ac,
-                    speed = 1.2f,
-                    scale = 0.8f
-                ),
-                width = 0.75f
+        private val enchantItem = Items.ENCHANTED_BOOK.defaultInstance
+        private val potionItem = Items.POTION.defaultInstance.also {
+            it.set(
+                DataComponents.POTION_CONTENTS,
+                PotionContents(Potions.HEALING)
             )
-            .setBackground(
-                Gradient(
-                    argbStart = 0xF0181C2A,
-                    argbEnd = 0xF02B233D
+        }
+        private val innateResistanceItem = Items.STRUCTURE_VOID.defaultInstance
+        private val invulnerabilityItem = Items.BARRIER.defaultInstance
+
+
+        private fun windowConfigDefault(
+            window: FloatingWindow.Builder,
+            entity: DummyEntity,
+            detailed: Boolean = false,
+            projection: DummyWindowProjection? = null
+        ) {
+            val damageData = entity.damageData
+            if (projection == null) {
+                window.attachToEntityRotation(entity).setOffset(0.9, 2.0, 0.0)
+            } else {
+                window.setFaceCamera(true)
+                    .setOffset(projection.x, projection.y, projection.z)
+            }
+            window.setSize(30f, 30f, autoScaleContent = true, autoFitWidth = true, autoFitHeight = true)
+                .setAlignment(WindowAlignment.CENTER)
+                .setPadding(3f)
+
+                .setBorder(
+                    AnimatedGradient(
+                        argbStart = 0xC5A5FB,
+                        argbEnd = 0x5700ac,
+                        speed = 1.2f,
+                        scale = 0.8f
+                    ),
+                    width = 0.75f
                 )
+                .setBackground(
+                    Gradient(
+                        argbStart = 0xF0181C2A,
+                        argbEnd = 0xF02B233D
+                    )
+                )
+
+            if (detailed) {
+                window.addText(
+                    Component.translatable("message.trainingdummy.original_damage").append(":"),
+                    textScale = 0.8f,
+                    shadow = true,
+                    color = 0xDCDCDCFF.toInt()
+                )
+                    .addText(
+                        "${damageData.originalDamage}",
+                        color = 0xFF9BE7FF.toInt(),
+                        shadow = true,
+                        alignment = WindowElement.Text.TextAlignment.CENTER,
+                        textScale = 2.5f
+                    )
+                    .addSeparator(
+                        color = AnimatedGradient(
+                            argbStart = 0xFF67E8F9,
+                            argbEnd = 0xFF8B5CF6,
+                            speed = 1.2f,
+                            scale = 0.8f
+                        ),
+                        thickness = 0.5f,
+                        margin = 2f
+                    )
+
+                    .addText(
+                        Component.translatable("message.trainingdummy.final_damage"),
+                        textScale = 0.8f,
+                        shadow = true,
+                        color = 0xDCDCDCFF.toInt()
+                    )
+            }
+
+            window.addText(
+                "${
+                    if (detailed) {
+                        damageData.newDamage
+                    } else {
+                        "%.2f".format(damageData.newDamage)
+                    }
+                }",
+                color = if (damageData.isCriticalHit) {
+                    AnimatedGradient(
+                        argbStart = 0xFF0000,
+                        argbEnd = 0xff8c00,
+                        speed = 5.0f,
+                        scale = 0.8f
+                    )
+                } else {
+                    Pulse(0xFF9BE7FF)
+                },
+                shadow = true,
+                alignment = WindowElement.Text.TextAlignment.CENTER,
+                textScale = 2.5f
             )
 
-        if(detailed){
-            window.addText(Component.translatable("message.trainingdummy.original_damage").append(":"),
-                textScale = 0.8f,
-                shadow = true,
-                color = 0xDCDCDCFF.toInt()
+            if (damageData.isCriticalHit) {
+                window.addText(
+                    Component.translatable(
+                        "message.trainingdummy.critical_multiplier",
+                        String.format(Locale.ROOT, "%.1f", damageData.damageMultiplier)
+                    ),
+                    shadow = true,
+                    alignment = WindowElement.Text.TextAlignment.CENTER,
+                    textScale = 0.8f,
+                    color = Pulse(color = 0xff1a1a, speed = 1.5f)
+                )
+
+            }
+
+            if (damageData.isReductions()) {
+
+                window.addSeparator(
+                    color = AnimatedGradient(
+                        argbStart = 0xFF67E8F9,
+                        argbEnd = 0xFF8B5CF6,
+                        speed = 1.2f,
+                        scale = 0.8f
+                    ),
+                    thickness = 0.5f,
+                    margin = 2f
+                )
+
+                if (damageData.armor > 0.0f) {
+                    window.addIconText(
+                        armorHudIcon,
+                        modeReductionText(
+                            detailed,
+                            "message.trainingdummy.reduction.armor",
+                            damageData.armor
+                        ),
+                        alignment = WindowElement.Text.TextAlignment.CENTER
+                    )
+                }
+                if (damageData.enchantments > 0.0f) {
+                    window.addItemText(
+                        enchantItem,
+                        modeReductionText(
+                            detailed,
+                            "message.trainingdummy.reduction.enchantments",
+                            damageData.enchantments
+                        ),
+                        alignment = WindowElement.Text.TextAlignment.CENTER
+                    )
+                }
+                if (damageData.mobEffects > 0.0f) {
+                    window.addItemText(
+                        potionItem,
+                        modeReductionText(
+                            detailed,
+                            "message.trainingdummy.reduction.effects",
+                            damageData.mobEffects
+                        ),
+                        alignment = WindowElement.Text.TextAlignment.CENTER
+                    )
+                }
+                if (damageData.absorption > 0.0f) {
+                    window.addIconText(
+                        absorptionHudIcon,
+                        modeReductionText(
+                            detailed,
+                            "message.trainingdummy.reduction.absorption",
+                            damageData.absorption
+                        ),
+                        alignment = WindowElement.Text.TextAlignment.CENTER
+                    )
+                }
+                if (damageData.innateResistance > 0.0f) {
+                    window.addItemText(
+                        innateResistanceItem,
+                        modeReductionText(
+                            detailed,
+                            "message.trainingdummy.reduction.innate_resistance",
+                            damageData.innateResistance
+                        ),
+                        alignment = WindowElement.Text.TextAlignment.CENTER
+                    )
+                }
+                if (damageData.invulnerability > 0.0f) {
+                    window.addItemText(
+                        invulnerabilityItem,
+                        modeReductionText(
+                            detailed,
+                            "message.trainingdummy.reduction.invulnerability",
+                            damageData.invulnerability
+                        ),
+                        alignment = WindowElement.Text.TextAlignment.CENTER
+                    )
+                }
+
+                window.addSeparator(
+                    color = AnimatedGradient(
+                        argbStart = 0xFF67E8F9,
+                        argbEnd = 0xFF8B5CF6,
+                        speed = 1.2f,
+                        scale = 0.8f
+                    ),
+                    thickness = 0.5f,
+                    margin = 2f
+                )
+
+            }
+
+        }
+
+        private fun configureModeWindow(
+            window: FloatingWindow.Builder,
+            entity: DummyEntity,
+            title: Component,
+            offsetX: Double = 0.8,
+            offsetY: Double = 2.0,
+            width: Float = 30f,
+            height: Float = 30f,
+            projection: DummyWindowProjection? = null,
+            projectionOffsetX: Double = 0.0,
+            projectionOffsetY: Double = 0.0
+        ) {
+            if (projection == null) {
+                window.attachToEntityRotation(entity).setOffset(offsetX, offsetY, 0.0)
+            } else {
+                window.setFaceCamera(true)
+                    .setOffset(
+                        projection.x + projectionOffsetX * projection.rightX,
+                        projection.y + projectionOffsetY,
+                        projection.z + projectionOffsetX * projection.rightZ
+                    )
+            }
+            window.setSize(width, height, autoScaleContent = true, autoFitWidth = true, autoFitHeight = true)
+                .setAlignment(WindowAlignment.CENTER)
+                .setPadding(3f)
+                .setCornerRadius(3f)
+                .setBorder(
+                    AnimatedGradient(
+                        argbStart = 0xFFC5A5FB,
+                        argbEnd = 0xFF5700AC,
+                        speed = 1.2f,
+                        scale = 0.8f
+                    ),
+                    width = 0.75f
+                )
+                .setBackground(
+                    Gradient(
+                        argbStart = 0xF0181C2A,
+                        argbEnd = 0xF02B233D
+                    )
+                )
+                .addText(
+                    title,
+                    color = 0xFF9BE7FF.toInt(),
+                    shadow = true,
+                    alignment = WindowElement.Text.TextAlignment.CENTER
+                )
+        }
+
+        private fun buildComparisonPanel(
+            window: FloatingWindow.Builder,
+            entity: DummyEntity,
+            title: Component,
+            stack: ItemStack,
+            damage: Float,
+            offsetX: Double,
+            projection: DummyWindowProjection? = null,
+            projectionOffsetX: Double = 0.0
+        ) {
+            configureModeWindow(
+                window = window,
+                entity = entity,
+                title = title,
+                offsetX = offsetX,
+                width = 24f,
+                height = 25f,
+                projection = projection,
+                projectionOffsetX = projectionOffsetX
             )
-                .addText("${damageData.originalDamage}",
-                    color = 0xFF9BE7FF.toInt(), shadow = true, alignment = WindowElement.Text.TextAlignment.CENTER, textScale = 2.5f)
+            window.addSeparator(color = modeWindowSeparator(), thickness = 0.5f, margin = 2f)
+            if (stack.isEmpty) {
+                window.addText(
+                    Component.translatable("message.trainingdummy.comparison.no_weapon"),
+                    color = 0xFFB9C9DC.toInt(),
+                    textScale = 0.8f,
+                    alignment = WindowElement.Text.TextAlignment.CENTER
+                )
+            } else {
+                window.addItemText(
+                    stack,
+                    stack.hoverName,
+                    itemSize = 18f,
+                    textScale = 0.8f,
+                    alignment = WindowElement.Text.TextAlignment.CENTER
+                )
+            }
+            window.addSeparator(color = modeWindowSeparator(), thickness = 0.5f, margin = 2f)
+                .addText(
+                    Component.literal(String.format(Locale.ROOT, "%.1f", damage)),
+                    color = Pulse(0xFF9BE7FF),
+                    shadow = true,
+                    textScale = 2f,
+                    alignment = WindowElement.Text.TextAlignment.CENTER
+                )
+        }
+
+        private fun modeWindowSeparator(): AnimatedGradient = AnimatedGradient(
+            argbStart = 0xFF67E8F9,
+            argbEnd = 0xFF8B5CF6,
+            speed = 1.2f,
+            scale = 0.8f
+        )
+
+        private fun windowDefault(
+            window: FloatingWindow.Builder,
+            damageData: DamageData,
+            entity: DummyEntity,
+            title: Component = Component.translatable("message.trainingdummy.damage_title")
+        ) {
+            window.attachToEntityRotation(entity)
+                .setOffset(0.6, 2.0, 0.0)
+                .setSize(24f, 24f, autoScaleContent = true, autoFitWidth = true, autoFitHeight = true)
+                .setAlignment(WindowAlignment.CENTER)
+                .setPadding(1f)
+                .setCornerRadius(3f)
+                .setBorder(
+                    AnimatedGradient(
+                        argbStart = 0xFF67E8F9,
+                        argbEnd = 0xFF8B5CF6,
+                        speed = 1.2f,
+                        scale = 0.8f
+                    ),
+                    width = 0.75f
+                )
+                .setBackground(
+                    Gradient(
+                        argbStart = 0xF0181C2A,
+                        argbEnd = 0xF02B233D
+                    )
+                )
+                .addText(title, color = 0xFF9BE7FF.toInt(), shadow = true)
                 .addSeparator(
                     color = AnimatedGradient(
                         argbStart = 0xFF67E8F9,
@@ -333,272 +804,90 @@ class DummyRenderer(context: EntityRendererProvider.Context) : HumanoidMobRender
                     margin = 2f
                 )
 
-                .addText(Component.translatable("message.trainingdummy.final_damage"),
-                    textScale = 0.8f,
-                    shadow = true,
-                    color = 0xDCDCDCFF.toInt()
+            var finalDamage: Component
+
+            if (damageData.isReductions()) {
+                window.addText(
+                    Component.translatable(
+                        "message.trainingdummy.raw_damage",
+                        String.format(Locale.ROOT, "%.1f", damageData.originalDamage)
+                    ).withStyle(ChatFormatting.RED)
                 )
-        }
-
-        window.addText( "${ if(detailed) {damageData.newDamage}else{"%.2f".format(damageData.newDamage)} }",
-            color = if(damageData.isCriticalHit){AnimatedGradient(
-                argbStart = 0xFF0000,
-                argbEnd = 0xff8c00,
-                speed = 5.0f,
-                scale = 0.8f
-            )}else{
-                Pulse(0xFF9BE7FF)} ,
-            shadow = true,
-            alignment = WindowElement.Text.TextAlignment.CENTER,
-            textScale = 2.5f)
-
-        if(damageData.isCriticalHit){
-            window.addText("x${damageData.damageMultiplier}crit",
-                shadow = true,
-                alignment = WindowElement.Text.TextAlignment.CENTER,
-                textScale = 0.8f,
-                color = Pulse(color = 0xff1a1a, speed = 1.5f))
-
-        }
-
-        if(damageData.isReductions()){
-
-            window.addSeparator(
-                color = AnimatedGradient(
-                    argbStart = 0xFF67E8F9,
-                    argbEnd = 0xFF8B5CF6,
-                    speed = 1.2f,
-                    scale = 0.8f
-                ),
-                thickness = 0.5f,
-                margin = 2f
-            )
+                    .addSeparator(color = Rainbow(speed = 1.0f), thickness = 0.5f, margin = 2f)
+                    .addText(Component.translatable("message.trainingdummy.reductions"), color = 0x0087F0.toInt())
+            } else {
+                window.setPadding(3f);
+            }
 
             if (damageData.armor > 0.0f) {
-                window.addIconText(
-                    armorHudIcon,
-                    ": -§a%.1f".format(damageData.armor),
-                    alignment = WindowElement.Text.TextAlignment.CENTER
-                )
+                window.addText(reductionText("message.trainingdummy.reduction.armor", damageData.armor))
             }
             if (damageData.enchantments > 0.0f) {
-                window.addItemText(
-                    enchantItem,
-                    ": -§a%.1f".format(damageData.enchantments),
-                    alignment = WindowElement.Text.TextAlignment.CENTER
-                )
+                window.addText(reductionText("message.trainingdummy.reduction.enchantments", damageData.enchantments))
             }
             if (damageData.mobEffects > 0.0f) {
-                window.addItemText(
-                    potionItem,
-                    ": -§a%.1f".format(damageData.mobEffects),
-                    alignment = WindowElement.Text.TextAlignment.CENTER
-                )
+                window.addText(reductionText("message.trainingdummy.reduction.effects", damageData.mobEffects))
             }
             if (damageData.absorption > 0.0f) {
-                window.addIconText(
-                    absorptionHudIcon,
-                    ": -§a%.1f".format(damageData.absorption),
-                    alignment = WindowElement.Text.TextAlignment.CENTER
-                )
+                window.addText(reductionText("message.trainingdummy.reduction.absorption", damageData.absorption))
             }
             if (damageData.innateResistance > 0.0f) {
-                window.addItemText(
-                    innateResistanceItem,
-                    ": -§a%.1f".format(damageData.innateResistance),
-                    alignment = WindowElement.Text.TextAlignment.CENTER
+                window.addText(
+                    reductionText(
+                        "message.trainingdummy.reduction.innate_resistance",
+                        damageData.innateResistance
+                    )
                 )
             }
             if (damageData.invulnerability > 0.0f) {
-                window.addItemText(
-                    invulnerabilityItem,
-                    ": -§a%.1f".format(damageData.invulnerability),
-                    alignment = WindowElement.Text.TextAlignment.CENTER
+                window.addText(
+                    reductionText(
+                        "message.trainingdummy.reduction.invulnerability",
+                        damageData.invulnerability
+                    )
                 )
             }
 
-            window.addSeparator(
-                color = AnimatedGradient(
-                    argbStart = 0xFF67E8F9,
-                    argbEnd = 0xFF8B5CF6,
-                    speed = 1.2f,
-                    scale = 0.8f
-                ),
-                thickness = 0.5f,
-                margin = 2f
-            )
-
-        }
-
-    }
-
-    private fun windowD(window: FloatingWindow.Builder,damageData: DamageData, entity: DummyEntity){
-        window.attachToEntityRotation(entity)
-            .setOffset(1.0, 2.0, 0.0)
-            .setSize(24f, 24f, autoScaleContent = true, autoFitWidth = true, autoFitHeight = true)
-            .setAlignment(WindowAlignment.CENTER)
-
-            .setPadding(3f)
-            .setBorder(Rainbow(speed = 1.0f), width = 0.5f)
-            .setBackground(Solid(0xDD000000))
-
-        var finaldamage = ""
-
-        if(damageData.isReductions()){
-            window.addText("Raw Damage: §c%.1f".format(damageData.originalDamage))
-                .addSeparator(color = Rainbow(speed = 1.0f), thickness = 0.5f, margin = 2f)
-                .addText("Reductions", color = 0x0087F0.toInt())
-        }else{window.setPadding(3f);}
-
-        if(damageData.armor > 0.0f){window.addText("Armor: -§a%.1f".format(damageData.armor))}
-        if(damageData.enchantments > 0.0f){window.addText(" Enchantments: -§a%.1f".format(damageData.enchantments))}
-        if(damageData.mobEffects > 0.0f){window.addText("Effects: -§a%.1f".format(damageData.mobEffects))}
-        if(damageData.absorption > 0.0f){window.addText("Absorption: -§a%.1f".format(damageData.absorption))}
-        if(damageData.innateResistance > 0.0f){window.addText("Innate Resistance: -§a%.1f".format(damageData.absorption))}
-        if(damageData.invulnerability > 0.0f){window.addText("Invulnerability: -§a%.1f".format(damageData.invulnerability))}
-
-        if(damageData.isReductions()){
-            window.addSeparator(color = Rainbow(speed = 1.0f), thickness = 0.5f, margin = 2f)
-            finaldamage = "Final: %.1f".format(damageData.newDamage)
-        }else{finaldamage = "%.1f".format(damageData.newDamage)}
-
-        if (damageData.isCriticalHit) {
-            window.addText(
-                "$finaldamage x${damageData.damageMultiplier}",
-                color = AnimatedGradient(
-                    argbStart = 0xFF0000, // Cor inicial (Branco)
-                    argbEnd = 0xFFFFFF,   // Cor final (Vermelho)
-                    speed = 5.0f,          // Velocidade do deslocamento
-                    scale = 1.0f           // Densidade/Frequência das ondas no texto
+            if (damageData.isReductions()) {
+                window.addSeparator(color = Rainbow(speed = 1.0f), thickness = 0.5f, margin = 2f)
+                finalDamage = Component.translatable(
+                    "message.trainingdummy.final_damage_value",
+                    String.format(Locale.ROOT, "%.1f", damageData.newDamage)
                 )
-            )
-        }else{
-            window.addText(finaldamage)
-        }
-    }
+            } else {
+                finalDamage = Component.literal("%.2f".format(Locale.ROOT, damageData.newDamage))
+            }
 
-    private fun windowDefault(window: FloatingWindow.Builder,damageData: DamageData, entity: DummyEntity,){
-        window.attachToEntityRotation(entity)
-            .setOffset(0.6, 2.0, 0.0)
-            .setSize(24f, 24f, autoScaleContent = true, autoFitWidth = true, autoFitHeight = true)
-            .setAlignment(WindowAlignment.CENTER)
-            .setPadding(1f)
-            .setCornerRadius(3f)
-            .setBorder(
-                AnimatedGradient(
-                    argbStart = 0xFF67E8F9,
-                    argbEnd = 0xFF8B5CF6,
-                    speed = 1.2f,
-                    scale = 0.8f
-                ),
-                width = 0.75f
-            )
-            .setBackground(
-                Gradient(
-                    argbStart = 0xF0181C2A,
-                    argbEnd = 0xF02B233D
+            if (damageData.isCriticalHit) {
+                window.addText(
+                    finalDamage.append(" ").append(
+                        Component.translatable(
+                            "message.trainingdummy.critical_multiplier",
+                            String.format(Locale.ROOT, "%.1f", damageData.damageMultiplier)
+                        )
+                    ),
+                    color = AnimatedGradient(
+                        argbStart = 0xFF0000, // Cor inicial (Branco)
+                        argbEnd = 0xFFFFFF,   // Cor final (Vermelho)
+                        speed = 5.0f,          // Velocidade do deslocamento
+                        scale = 1.0f           // Densidade/Frequência das ondas no texto
+                    )
                 )
-            )
-            .addText("DANO", color = 0xFF9BE7FF.toInt(), shadow = true)
-            .addSeparator(
-                color = AnimatedGradient(
-                    argbStart = 0xFF67E8F9,
-                    argbEnd = 0xFF8B5CF6,
-                    speed = 1.2f,
-                    scale = 0.8f
-                ),
-                thickness = 0.5f,
-                margin = 2f
-            )
-
-        var finaldamage = ""
-
-        if(damageData.isReductions()){
-            window.addText("Raw Damage: §c%.1f".format(damageData.originalDamage))
-                .addSeparator(color = Rainbow(speed = 1.0f), thickness = 0.5f, margin = 2f)
-                .addText("Reductions", color = 0x0087F0.toInt())
-        }else{
-            window.setPadding(3f);
+            } else {
+                window.addText(finalDamage)
+            }
         }
 
-        if(damageData.armor > 0.0f){window.addText("Armor: -§a%.1f".format(damageData.armor))}
-        if(damageData.enchantments > 0.0f){window.addText(" Enchantments: -§a%.1f".format(damageData.enchantments))}
-        if(damageData.mobEffects > 0.0f){window.addText("Effects: -§a%.1f".format(damageData.mobEffects))}
-        if(damageData.absorption > 0.0f){window.addText("Absorption: -§a%.1f".format(damageData.absorption))}
-        if(damageData.innateResistance > 0.0f){window.addText("Innate Resistance: -§a%.1f".format(damageData.innateResistance))}
-        if(damageData.invulnerability > 0.0f){window.addText("Invulnerability: -§a%.1f".format(damageData.invulnerability))}
-
-        if(damageData.isReductions()){
-            window.addSeparator(color = Rainbow(speed = 1.0f), thickness = 0.5f, margin = 2f)
-            finaldamage = "Final: %.1f".format(damageData.newDamage)
-        }else{finaldamage = "%.1f".format(damageData.newDamage)}
-
-        if (damageData.isCriticalHit) {
-            window.addText(
-                "$finaldamage x${damageData.damageMultiplier}",
-                color = AnimatedGradient(
-                    argbStart = 0xFF0000, // Cor inicial (Branco)
-                    argbEnd = 0xFFFFFF,   // Cor final (Vermelho)
-                    speed = 5.0f,          // Velocidade do deslocamento
-                    scale = 1.0f           // Densidade/Frequência das ondas no texto
-                )
-            )
-        }else{
-            window.addText(finaldamage)
+        private fun modeReductionText(detailed: Boolean, nameKey: String, value: Float): Component {
+            val key = if (detailed) nameKey else "message.trainingdummy.reduction.icon_amount"
+            val formattedValue = Component.literal(String.format(Locale.ROOT, "%.1f", value))
+                .withStyle(ChatFormatting.WHITE)
+            return Component.translatable(key, formattedValue)
+                .withStyle(ChatFormatting.GREEN)
         }
-    }
 
-
-    private fun renderFloatingWindow(
-        entity: DummyEntity,
-        poseStack: PoseStack,
-        buffer: MultiBufferSource,
-        packedLight: Int
-    ) {
-        // Exibe a janela apenas se houver registro de dano recente
-        if (entity.displayTicks > 0) {
-
-            val damageData = entity.damageData
-
-            val window = FloatingWindow.Builder()
-                .attachToEntityRotation(entity) // Trava a rotação na direção do Dummy (+180° ajustado)
-                .setOffset(1.0, 2.0, 0.0)
-                .setSize(16f,16f, autoScaleContent = true)// Posição no ombro/lado do Dummy
-                .setAlignment(WindowAlignment.CENTER) // Cresce para a direita e para baixo
-                .setPadding(1f)
-
-                .setBorder(WindowColor.Rainbow(speed = 1.0f), width = 0.5f)
-                .setBackground(WindowColor.Solid(0xDD000000))
-
-                .addText("Raw Damage: §c%.1f".format(damageData.originalDamage))
-                .addSeparator(color = WindowColor.Rainbow(speed = 1.0f), thickness = 0.5f, margin = 2f)
-                .addText("Reductions", color = 0x0087F0.toInt())
-
-
-                .addText("Armor: §a%.1f".format(damageData.armor))
-                .addSeparator(color = WindowColor.Rainbow(speed = 1.0f), thickness = 0.5f, margin = 2f)
-                .addText("Final: %.1f".format(damageData.newDamage) + "${if (damageData.isCriticalHit) {" §cCrit ${damageData.damageMultiplier}x"} else {"§a"}} ")
-
-
-                // Conteúdo
-                .addText("§lESTATÍSTICAS", color = 0xFFFFAA00.toInt())
-                .addSpacer(2f)
-                .addText("Raw Damage: §c%.1f".format(damageData.originalDamage))
-                .addText("Blocked: §b%.1f".format(damageData.blockedDamage))
-                .addText("Shiel: §a%.1f".format(damageData.shieldDamage))
-                .addText("Dano Final: ${if (damageData.isCriticalHit) "§c" else "§a"}%.1f".format(damageData.newDamage))
-                .addText("Mob: §a%.1f".format(damageData.mobEffects))
-                .addText("Absorp: §a%.1f".format(damageData.absorption))
-                .addText("Armor: §a%.1f".format(damageData.armor))
-                .addText("Enchant: §a%.1f".format(damageData.enchantments))
-                .addText("Innate: §a%.1f".format(damageData.innateResistance))
-                .addText("Invul: §a%.1f".format(damageData.invulnerability))
-                //.addText("Crítico: " + if (entity.lastCrit>0f) "§aSIM" else "§cNÃO")
-
-
-                .build()
-
-            window.render(poseStack, buffer, packedLight)
-        }
+        private fun reductionText(key: String, value: Float): Component =
+            Component.translatable(key, String.format(Locale.ROOT, "%.1f", value))
+                .withStyle(ChatFormatting.GREEN)
     }
 }

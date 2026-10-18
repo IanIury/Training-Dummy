@@ -1,6 +1,7 @@
 package net.ian.trainingdummy.event
 
 import net.ian.trainingdummy.TrainingDummy
+import net.ian.trainingdummy.block.entityblock.DummyManagementBlockEntity
 import net.ian.trainingdummy.entity.DummyEntity
 import net.ian.trainingdummy.event.utils.DamageData
 import net.minecraft.util.Mth
@@ -12,15 +13,9 @@ import net.neoforged.fml.common.EventBusSubscriber
 import net.neoforged.neoforge.common.damagesource.DamageContainer.Reduction
 import net.neoforged.neoforge.event.entity.living.LivingDamageEvent
 import net.neoforged.neoforge.event.entity.player.CriticalHitEvent
-import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent
 
 @EventBusSubscriber(modid = TrainingDummy.ID)
 object ModEvents {
-
-    @SubscribeEvent
-    fun registerPayloads(event: RegisterPayloadHandlersEvent) {
-        val registrar = event.registrar("1.0.0")
-    }
 
     @SubscribeEvent
     fun onDamage(event: LivingDamageEvent.Post){
@@ -30,12 +25,11 @@ object ModEvents {
         //val player : Player = event.source.entity as? Player ?: return
         val vitima : DummyEntity = event.entity as? DummyEntity ?: return
 
-        var damageData = DamageData()
+        val damageData = if (event.source.entity is Player) vitima.preDamageData else DamageData()
+        vitima.preDamageData = DamageData()
 
         vitima.damageStackOld = vitima.damageStack
         vitima.damageStack = event.source.weaponItem ?: ItemStack.EMPTY
-
-        if(event.source.entity is Player){damageData = vitima.preDamageData}
 
         val newDamaData = damageData.copy(
             newDamage = event.newDamage,
@@ -53,6 +47,7 @@ object ModEvents {
 
         //vitima.entityData.set(DummyEntity.DAMAGE_DATA,damaData)
         vitima.onCustomDamageReceived(newDamaData)
+        DummyManagementBlockEntity.handleDummyDamage(vitima, event.newDamage)
 
         hitAnimation(event)
 

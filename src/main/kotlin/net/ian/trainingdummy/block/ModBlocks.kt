@@ -5,7 +5,7 @@ import net.ian.trainingdummy.block.custom.DisplayDummyBlock
 import net.ian.trainingdummy.block.custom.DummyManagementBlock
 import net.ian.trainingdummy.item.ModItems
 import net.ian.trainingdummy.item.custom.DisplayDummyBlockItem
-import net.minecraft.world.item.BlockItem
+import net.ian.trainingdummy.item.custom.DummyManagementBlockItem
 import net.minecraft.world.item.Item
 import net.minecraft.world.level.block.Block
 import net.minecraft.world.level.block.state.BlockBehaviour
@@ -35,7 +35,7 @@ object ModBlocks {
         )
     }
 
-    val DUMMY_MANAGEMENT_BLOCK by display_dummyRegister("dummy_management_block") {
+    val DUMMY_MANAGEMENT_BLOCK by registerBlock("dummy_management_block", registerItem = true) {
         DummyManagementBlock(BlockBehaviour.Properties.of()
             .strength(1f)
         )
@@ -51,8 +51,10 @@ object ModBlocks {
         return toReturn
     }
 
-    private fun <T : Block> registerBlockItem(name: String, block : DeferredBlock<T>) {
-        ModItems.REGISTRY.registerItem(name){ BlockItem(block.get(), Item.Properties()) }
+    private fun <T : Block> registerBlockItem(name: String, block: DeferredBlock<T>) {
+        ModItems.REGISTRY.registerItem(name) {
+            DummyManagementBlockItem(block.get(), Item.Properties())
+        }
     }
 
     private fun <T : Block> display_dummyRegister(name: String, block: Supplier<T>): DeferredBlock<T> {

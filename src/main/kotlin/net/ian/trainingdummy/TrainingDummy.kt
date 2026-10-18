@@ -9,6 +9,8 @@ import net.ian.trainingdummy.init.serializers.ModDataSerializersRegistry
 import net.ian.trainingdummy.item.ModCreativeModelTabs
 import net.ian.trainingdummy.item.ModItems
 import net.ian.trainingdummy.network.ServerboundChangeModePayload
+import net.ian.trainingdummy.network.ServerboundDummyManagementActionPayload
+import net.ian.trainingdummy.network.ServerboundSetDetailedDamageWindowPayload
 import net.ian.trainingdummy.screen.ModMenuTypes
 import net.ian.trainingdummy.server.ServerSetup
 import net.minecraft.client.Minecraft
@@ -86,6 +88,16 @@ object TrainingDummy {
             ServerboundChangeModePayload.TYPE,
             ServerboundChangeModePayload.STREAM_CODEC,
             ServerboundChangeModePayload::handle
+        )
+        registrar.playToServer(
+            ServerboundSetDetailedDamageWindowPayload.TYPE,
+            ServerboundSetDetailedDamageWindowPayload.STREAM_CODEC,
+            ServerboundSetDetailedDamageWindowPayload::handle
+        )
+        registrar.playToServer(
+            ServerboundDummyManagementActionPayload.TYPE,
+            ServerboundDummyManagementActionPayload.STREAM_CODEC,
+            ServerboundDummyManagementActionPayload::handle
         )
     }
 

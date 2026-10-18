@@ -1,5 +1,6 @@
 package net.ian.trainingdummy.item.custom
 
+import net.ian.trainingdummy.TrainingDummy
 import net.ian.trainingdummy.block.entityblock.DisplayDummyBlockEntity
 import net.ian.trainingdummy.entity.DummyEntity
 import net.minecraft.core.BlockPos
@@ -10,14 +11,33 @@ import net.minecraft.world.InteractionResult
 import net.minecraft.world.entity.LivingEntity
 import net.minecraft.world.entity.player.Player
 import net.minecraft.world.item.BlockItem
+import net.minecraft.world.item.Item
 import net.minecraft.world.item.ItemStack
+import net.minecraft.world.item.TooltipFlag
 import net.minecraft.world.item.component.CustomData
 import net.minecraft.world.level.Level
 import net.minecraft.world.level.block.Block
 import net.minecraft.world.level.block.state.BlockState
+import net.minecraft.ChatFormatting
 import java.util.UUID
 
 class DisplayDummyBlockItem(block: Block, properties: Properties) : BlockItem(block, properties) {
+
+    override fun appendHoverText(
+        stack: ItemStack,
+        context: Item.TooltipContext,
+        tooltipComponents: MutableList<Component>,
+        tooltipFlag: TooltipFlag
+    ) {
+        tooltipComponents.add(
+            Component.translatable("item.trainingdummy.display_dummy.tooltip.link")
+                .withStyle(ChatFormatting.GRAY)
+        )
+        tooltipComponents.add(
+            Component.translatable("item.trainingdummy.display_dummy.tooltip.place")
+                .withStyle(ChatFormatting.GRAY)
+        )
+    }
 
     override fun interactLivingEntity(
         stack: ItemStack,
@@ -64,7 +84,12 @@ class DisplayDummyBlockItem(block: Block, properties: Properties) : BlockItem(bl
 
             if (blockEntity != null && customData != null && customData.contains("dummy_uuid")) {
                 val uuidStr = customData.copyTag().getString("dummy_uuid")
-                blockEntity.target_entity_uuid = UUID.fromString(uuidStr)
+                blockEntity.target_entity_uuid = try {
+                    UUID.fromString(uuidStr)
+                } catch (_: IllegalArgumentException) {
+                    TrainingDummy.LOGGER.warn("Ignoring invalid dummy UUID '{}' in display block item", uuidStr)
+                    null
+                }
                 blockEntity.setChanged()
                 level.sendBlockUpdated(pos, state, state, 3)
             }

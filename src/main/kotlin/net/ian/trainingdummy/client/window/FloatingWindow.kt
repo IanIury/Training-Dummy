@@ -305,6 +305,46 @@ class FloatingWindow private constructor(
 
         fun addItemText(
             stack: ItemStack,
+            component: Component,
+            color: Int,
+            itemSize: Float = 9f,
+            textScale: Float = 1f,
+            shadow: Boolean = false,
+            spacing: Float = 1f,
+            alignment: WindowElement.Text.TextAlignment = WindowElement.Text.TextAlignment.LEFT
+        ) = addItemText(
+            stack,
+            component,
+            WindowColor.Solid(color.toLong() and 0xFFFFFFFFL),
+            itemSize,
+            textScale,
+            shadow,
+            spacing,
+            alignment
+        )
+
+        fun addItemText(
+            stack: ItemStack,
+            component: Component,
+            color: WindowColor = WindowColor.Solid(0xFFFFFFFFL),
+            itemSize: Float = 9f,
+            textScale: Float = 1f,
+            shadow: Boolean = false,
+            spacing: Float = 1f,
+            alignment: WindowElement.Text.TextAlignment = WindowElement.Text.TextAlignment.LEFT
+        ) = apply {
+            elements += WindowElement.Row(
+                listOf(
+                    WindowElement.ItemIcon(stack.copy(), itemSize),
+                    WindowElement.Text(component, color, shadow, textScale)
+                ),
+                spacing,
+                alignment
+            )
+        }
+
+        fun addItemText(
+            stack: ItemStack,
             text: String,
             color: Int,
             itemSize: Float = 9f,
@@ -338,6 +378,26 @@ class FloatingWindow private constructor(
                 listOf(
                     WindowElement.ImageIcon(texture, iconSize, iconTint),
                     WindowElement.Text(Component.literal(text), color, shadow, textScale)
+                ),
+                spacing,
+                alignment
+            )
+        }
+
+        fun addIconText(
+            texture: ResourceLocation,
+            component: Component,
+            color: WindowColor = WindowColor.Solid(0xFFFFFFFFL),
+            iconSize: Float = 9f,
+            textScale: Float = 1f,
+            shadow: Boolean = false,
+            spacing: Float = 1f,
+            alignment: WindowElement.Text.TextAlignment = WindowElement.Text.TextAlignment.LEFT
+        ) = apply {
+            elements += WindowElement.Row(
+                listOf(
+                    WindowElement.ImageIcon(texture, iconSize),
+                    WindowElement.Text(component, color, shadow, textScale)
                 ),
                 spacing,
                 alignment

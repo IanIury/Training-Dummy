@@ -7,13 +7,22 @@ import net.ian.trainingdummy.client.window.FloatingWindow
 import net.ian.trainingdummy.client.window.WindowAlignment
 import net.ian.trainingdummy.client.window.WindowColor
 import net.ian.trainingdummy.entity.DummyEntity
+import net.ian.trainingdummy.entity.entityrender.DummyRenderer
+import net.ian.trainingdummy.entity.entityrender.DummyWindowProjection
+import net.minecraft.client.Minecraft
+import net.minecraft.client.multiplayer.ClientLevel
 import net.minecraft.client.renderer.MultiBufferSource
 import net.minecraft.client.renderer.blockentity.BlockEntityRenderer
 import net.minecraft.client.renderer.blockentity.BlockEntityRendererProvider
 import net.minecraft.core.Direction
 import net.minecraft.world.level.block.state.properties.AttachFace
+import org.joml.Vector3f
+import java.util.UUID
+import java.util.WeakHashMap
 
-class DisplayDummyBlockEntityRenderer(context: BlockEntityRendererProvider.Context) : BlockEntityRenderer<DisplayDummyBlockEntity> {
+class DisplayDummyBlockEntityRenderer(context: BlockEntityRendererProvider.Context) :
+    BlockEntityRenderer<DisplayDummyBlockEntity> {
+    private val targetCache = WeakHashMap<DisplayDummyBlockEntity, CachedTarget>()
 
     override fun render(
         pBlockEntity: DisplayDummyBlockEntity,
@@ -23,11 +32,12 @@ class DisplayDummyBlockEntityRenderer(context: BlockEntityRendererProvider.Conte
         pPacketLight: Int,
         pPackedOverlay: Int
     ) {
-        renderFloatingWindowDefault(pBlockEntity, pose, buffer, pPacketLight)
+        renderFloatingWindowDefault(pBlockEntity, pPartialTick, pose, buffer, pPacketLight)
     }
 
     private fun renderFloatingWindowDefault(
         pBlockEntity: DisplayDummyBlockEntity,
+        partialTick: Float,
         poseStack: PoseStack,
         buffer: MultiBufferSource,
         packedLight: Int
@@ -35,8 +45,10 @@ class DisplayDummyBlockEntityRenderer(context: BlockEntityRendererProvider.Conte
         val state = pBlockEntity.blockState
 
         // Recupera as propriedades do estado do bloco (com valores de fallback seguros)
-        val face = if (state.hasProperty(DisplayDummyBlock.FACE)) state.getValue(DisplayDummyBlock.FACE) else AttachFace.FLOOR
-        val facing = if (state.hasProperty(DisplayDummyBlock.FACING)) state.getValue(DisplayDummyBlock.FACING) else Direction.NORTH
+        val face =
+            if (state.hasProperty(DisplayDummyBlock.FACE)) state.getValue(DisplayDummyBlock.FACE) else AttachFace.FLOOR
+        val facing =
+            if (state.hasProperty(DisplayDummyBlock.FACING)) state.getValue(DisplayDummyBlock.FACING) else Direction.NORTH
 
         // Lógica de Deslocamento (Offset) no Espaço Local
         var offsetX = 0.5
@@ -59,15 +71,25 @@ class DisplayDummyBlockEntityRenderer(context: BlockEntityRendererProvider.Conte
                 when (facing) {
                     Direction.NORTH -> offsetZ -= distance
                     Direction.SOUTH -> offsetZ += distance
-                    Direction.WEST  -> offsetX -= distance
-                    Direction.EAST  -> offsetX += distance
+                    Direction.WEST -> offsetX -= distance
+                    Direction.EAST -> offsetX += distance
                     else -> {}
                 }
             }
         }
 
         // --- Renderização Fallback (Sem Entidade Vinculada) ---
-        val entity = pBlockEntity.getEntityByUUID() as? DummyEntity ?: run {
+        val clientLevel = pBlockEntity.level as? ClientLevel
+        val camera = Minecraft.getInstance().gameRenderer.mainCamera
+        val cameraRight = Vector3f(1f, 0f, 0f).rotate(camera.rotation())
+        val projection = DummyWindowProjection(
+            offsetX,
+            offsetY,
+            offsetZ,
+            cameraRight.x.toDouble(),
+            cameraRight.z.toDouble()
+        )
+        val entity = clientLevel?.let { resolveTarget(pBlockEntity, it) } ?: run {
             FloatingWindow.Builder()
                 .setOffset(offsetX, offsetY, offsetZ)
                 .setSize(16f, 16f)
@@ -82,67 +104,39 @@ class DisplayDummyBlockEntityRenderer(context: BlockEntityRendererProvider.Conte
             return
         }
 
-        val damageData = entity.damageData
-
-        val window = FloatingWindow.Builder()
-            .setOffset(offsetX, offsetY, offsetZ)
-            .setSize(
-                24f,
-                24f,
-                autoScaleContent = true,
-                autoFitWidth = true,
-                autoFitHeight = true
-            )
-            .setAlignment(WindowAlignment.CENTER)
-            .setPadding(1f)
-            .setBorder(
-                WindowColor.AnimatedGradient(
-                    argbStart = 0xFFF154,
-                    argbEnd = 0xDCE5FC,
-                    speed = 5.0f,
-                    scale = 1.0f
-                )
-            )
-            .setBackground(WindowColor.Solid(0xDD000000))
-
-        var finaldamage = ""
-
-        if (damageData.isReductions()) {
-            window.addText("Raw Damage: §c%.1f".format(damageData.originalDamage))
-                .addSeparator(color = WindowColor.Rainbow(speed = 1.0f), thickness = 0.5f, margin = 2f)
-                .addText("Reductions", color = 0x0087F0)
-        } else {
-            window.setPadding(3f)
-        }
-
-        if (damageData.armor > 0.0f) { window.addText("Armor: -§a%.1f".format(damageData.armor)) }
-        if (damageData.enchantments > 0.0f) { window.addText(" Enchantments: -§a%.1f".format(damageData.enchantments)) }
-        if (damageData.mobEffects > 0.0f) { window.addText("Effects: -§a%.1f".format(damageData.mobEffects)) }
-        if (damageData.absorption > 0.0f) { window.addText("Absorption: -§a%.1f".format(damageData.absorption)) }
-        if (damageData.innateResistance > 0.0f) { window.addText("Innate Resistance: -§a%.1f".format(damageData.absorption)) }
-        if (damageData.invulnerability > 0.0f) { window.addText("Invulnerability: -§a%.1f".format(damageData.invulnerability)) }
-
-        if (damageData.isReductions()) {
-            window.addSeparator(color = WindowColor.Rainbow(speed = 1.0f), thickness = 0.5f, margin = 2f)
-            finaldamage = "Final: %.1f".format(damageData.newDamage)
-        } else {
-            finaldamage = "%.1f".format(damageData.newDamage)
-        }
-
-        if (damageData.isCriticalHit) {
-            window.addText(
-                "$finaldamage x${damageData.damageMultiplier}",
-                color = WindowColor.AnimatedGradient(
-                    argbStart = 0xFF0000,
-                    argbEnd = 0xFFFFFF,
-                    speed = 5.0f,
-                    scale = 1.0f
-                )
-            )
-        } else {
-            window.addText(finaldamage)
-        }
-
-        window.build().render(poseStack, buffer, packedLight)
+        DummyRenderer.renderFloatingWindowModo(
+            entity,
+            partialTick,
+            poseStack,
+            buffer,
+            packedLight,
+            projection
+        )
     }
+
+    private fun resolveTarget(blockEntity: DisplayDummyBlockEntity, level: ClientLevel): DummyEntity? {
+        val targetUuid = blockEntity.target_entity_uuid ?: run {
+            targetCache.remove(blockEntity)
+            return null
+        }
+        val cached = targetCache[blockEntity]
+            ?.takeIf { it.uuid == targetUuid }
+            ?: CachedTarget(targetUuid).also { targetCache[blockEntity] = it }
+
+        cached.entity?.takeIf {
+            it.uuid == targetUuid && it.level() === level && it.isAlive
+        }?.let { return it }
+
+        if (cached.lastLookupGameTime == level.gameTime) return null
+        cached.lastLookupGameTime = level.gameTime
+        cached.entity = level.entitiesForRendering()
+            .firstOrNull { it.uuid == targetUuid } as? DummyEntity
+        return cached.entity
+    }
+
+    private data class CachedTarget(
+        val uuid: UUID,
+        var entity: DummyEntity? = null,
+        var lastLookupGameTime: Long = Long.MIN_VALUE
+    )
 }
