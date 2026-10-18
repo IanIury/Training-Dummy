@@ -19,10 +19,10 @@ import net.minecraft.world.level.block.state.properties.AttachFace
 import net.minecraft.world.level.block.state.properties.BlockStateProperties
 import net.minecraft.world.level.block.state.properties.DirectionProperty
 import net.minecraft.world.level.block.state.properties.EnumProperty
+import net.minecraft.world.phys.Vec3
 import net.minecraft.world.phys.shapes.CollisionContext
 import net.minecraft.world.phys.shapes.Shapes
 import net.minecraft.world.phys.shapes.VoxelShape
-import net.minecraft.world.phys.Vec3
 
 class DisplayDummyBlock(properties: Properties) : BaseEntityBlock(properties) {
 
@@ -40,11 +40,18 @@ class DisplayDummyBlock(properties: Properties) : BaseEntityBlock(properties) {
         val FACING: DirectionProperty = HorizontalDirectionalBlock.FACING
         val FACE: EnumProperty<AttachFace> = BlockStateProperties.ATTACH_FACE
 
-        // VoxelShape base apontando para o Norte no Chão
+        // VoxelShape base apontando para o Norte no Chão, alinhado aos elementos do modelo.
         private val BASE_SHAPE = Block.box(3.0, 0.0, 5.0, 13.0, 1.0, 11.0)
-        private val POLE_SHAPE = Block.box(7.0, 1.0, 7.0, 9.0, 3.0, 9.0)
-        private val TOP_SHAPE = Block.box(4.5, 3.0, 6.5, 11.5, 3.1, 9.5)
-        val SHAPE_BASE: VoxelShape = Shapes.or(BASE_SHAPE, POLE_SHAPE, TOP_SHAPE)
+        private val BASE_CONNECTOR_SHAPE = Block.box(6.5, 1.0, 7.0, 9.5, 1.3, 9.0)
+        private val POLE_SHAPE = Block.box(7.5, 1.3, 7.5, 8.5, 3.3, 8.5)
+        private val TOP_SHAPE = Block.box(0.5, 3.3, 7.5, 15.5, 3.8, 8.5)
+        val SHAPE_BASE: VoxelShape = Shapes.or(
+            BASE_SHAPE,
+            BASE_CONNECTOR_SHAPE,
+            POLE_SHAPE,
+            TOP_SHAPE
+        )
+
 
 
         fun getShapeForState(state: BlockState): VoxelShape {
