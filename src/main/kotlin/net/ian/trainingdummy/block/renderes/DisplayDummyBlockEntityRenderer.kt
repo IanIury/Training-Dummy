@@ -3,9 +3,10 @@ package net.ian.trainingdummy.block.renderes
 import com.mojang.blaze3d.vertex.PoseStack
 import net.ian.trainingdummy.block.custom.DisplayDummyBlock
 import net.ian.trainingdummy.block.entityblock.DisplayDummyBlockEntity
-import net.ian.trainingdummy.client.window.FloatingWindow
-import net.ian.trainingdummy.client.window.WindowAlignment
-import net.ian.trainingdummy.client.window.WindowColor
+import dev.ian.worldpanel.FloatingWindow
+import dev.ian.worldpanel.WindowAlignment
+import dev.ian.worldpanel.WindowColor
+import dev.ian.worldpanel.WindowElement
 import net.ian.trainingdummy.entity.DummyEntity
 import net.ian.trainingdummy.entity.entityrender.DummyRenderer
 import net.ian.trainingdummy.entity.entityrender.DummyWindowProjection

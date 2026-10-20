@@ -2,22 +2,26 @@ package net.ian.trainingdummy.entity.entityrender
 
 
 import com.mojang.blaze3d.vertex.PoseStack
+import dev.ian.worldpanel.FloatingWindow
+import dev.ian.worldpanel.WindowAlignment
+import dev.ian.worldpanel.WindowColor
+import dev.ian.worldpanel.WindowElement
+import dev.ian.worldpanel.shape.PanelShape
+import dev.ian.worldpanel.shape.TextureFitMode
+import dev.ian.worldpanel.region.RegionMap
+import dev.ian.worldpanel.layout.ContentLayout
+import dev.ian.worldpanel.depth.DepthStyle
+import dev.ian.worldpanel.shape.RectF
+
 import net.ian.trainingdummy.TrainingDummy
 import net.ian.trainingdummy.client.layer.DummyCustomHeadLayer
 import net.ian.trainingdummy.client.layer.DummyElytraLayer
 import net.ian.trainingdummy.client.layer.DummyFaceLayer
 import net.ian.trainingdummy.client.layer.DummyHumanoidArmorLayer
 import net.ian.trainingdummy.client.layer.DummyItemInHandLayer
-import net.ian.trainingdummy.client.layer.DummyOutlineLayer
-
 
 import net.ian.trainingdummy.client.model.DummyModel
 
-import net.ian.trainingdummy.client.window.FloatingWindow
-import net.ian.trainingdummy.client.window.FloatingWindow.*
-import net.ian.trainingdummy.client.window.WindowAlignment
-import net.ian.trainingdummy.client.window.WindowColor.*
-import net.ian.trainingdummy.client.window.WindowElement
 import net.ian.trainingdummy.entity.DummyEntity
 import net.ian.trainingdummy.event.utils.DamageData
 import net.ian.trainingdummy.init.enums.TrainingModos
@@ -138,6 +142,8 @@ class DummyRenderer(context: EntityRendererProvider.Context) : HumanoidMobRender
                 effect.equals("-endGateway-", ignoreCase = true) -> RenderType.endGateway()
                 effect.equals("-entityGlint-", ignoreCase = true) -> RenderType.entityGlint()
                 effect.equals("-translucent-", ignoreCase = true) -> RenderType.translucent()
+                effect.equals("-lightning-", ignoreCase = true) -> RenderType.lightning()
+                effect.equals("-clouds-", ignoreCase = true) -> RenderType.clouds()
                 else -> return
             }
 
@@ -196,12 +202,16 @@ class DummyRenderer(context: EntityRendererProvider.Context) : HumanoidMobRender
             when (modoAtual) {
 
                 TrainingModos.DEFAULT -> {
+                    //windowDefaultDog(window)
+
                     windowConfigDefault(
                         window,
                         entity,
                         detailed = entity.detailedDamageWindow,
                         projection = projection
                     )
+
+
                 }
 
                 TrainingModos.DPS -> {
@@ -219,21 +229,21 @@ class DummyRenderer(context: EntityRendererProvider.Context) : HumanoidMobRender
 
                         .setBorder(
                             when (entity.dpsTestState) {
-                                DummyEntity.DPS_STATE_READY -> AnimatedGradient(
+                                DummyEntity.DPS_STATE_READY -> WindowColor.AnimatedGradient(
                                     argbStart = 0xFF65E8A0,
                                     argbEnd = 0xFF21B6A8,
                                     speed = 0.8f,
                                     scale = 0.8f
                                 )
 
-                                DummyEntity.DPS_STATE_COOLDOWN -> AnimatedGradient(
+                                DummyEntity.DPS_STATE_COOLDOWN -> WindowColor.AnimatedGradient(
                                     argbStart = 0xFFFFB454,
                                     argbEnd = 0xFFFF5A5A,
                                     speed = 0.8f,
                                     scale = 0.8f
                                 )
 
-                                else -> AnimatedGradient(
+                                else -> WindowColor.AnimatedGradient(
                                     argbStart = 0xFFC5A5FB,
                                     argbEnd = 0xFF5700AC,
                                     speed = 1.2f,
@@ -243,7 +253,7 @@ class DummyRenderer(context: EntityRendererProvider.Context) : HumanoidMobRender
                             width = 0.75f
                         )
                         .setBackground(
-                            Gradient(
+                            WindowColor.Gradient(
                                 argbStart = 0xF0181C2A,
                                 argbEnd = 0xF02B233D
                             )
@@ -351,7 +361,7 @@ class DummyRenderer(context: EntityRendererProvider.Context) : HumanoidMobRender
                                 "message.trainingdummy.accumulated_value",
                                 String.format(Locale.ROOT, "%.1f", damageData.newDamage)
                             ),
-                            color = Pulse(0xFF9BE7FF),
+                            color = WindowColor.Pulse(0xFF9BE7FF),
                             shadow = true,
                             textScale = 2.5f,
                             alignment = WindowElement.Text.TextAlignment.CENTER
@@ -370,7 +380,7 @@ class DummyRenderer(context: EntityRendererProvider.Context) : HumanoidMobRender
                         projectionOffsetX = 0.35
                     )
 
-                    val window2 = Builder()
+                    val window2 = FloatingWindow.Builder()
                     buildComparisonPanel(
                         window2,
                         entity,
@@ -394,7 +404,7 @@ class DummyRenderer(context: EntityRendererProvider.Context) : HumanoidMobRender
                         difference < -0.001f -> 0xFFFF9A9A.toInt()
                         else -> 0xFFFFD479.toInt()
                     }
-                    val differenceWindow = Builder()
+                    val differenceWindow = FloatingWindow.Builder()
                     configureModeWindow(
                         differenceWindow,
                         entity,
@@ -470,6 +480,7 @@ class DummyRenderer(context: EntityRendererProvider.Context) : HumanoidMobRender
             detailed: Boolean = false,
             projection: DummyWindowProjection? = null
         ) {
+
             val damageData = entity.damageData
             if (projection == null) {
                 window.attachToEntityRotation(entity).setOffset(0.9, 2.0, 0.0)
@@ -477,12 +488,15 @@ class DummyRenderer(context: EntityRendererProvider.Context) : HumanoidMobRender
                 window.setFaceCamera(true)
                     .setOffset(projection.x, projection.y, projection.z)
             }
+            window.setShape(PanelShape.circle())
             window.setSize(30f, 30f, autoScaleContent = true, autoFitWidth = true, autoFitHeight = true)
                 .setAlignment(WindowAlignment.CENTER)
                 .setPadding(3f)
 
+
+
                 .setBorder(
-                    AnimatedGradient(
+                    WindowColor.AnimatedGradient(
                         argbStart = 0xC5A5FB,
                         argbEnd = 0x5700ac,
                         speed = 1.2f,
@@ -491,7 +505,7 @@ class DummyRenderer(context: EntityRendererProvider.Context) : HumanoidMobRender
                     width = 0.75f
                 )
                 .setBackground(
-                    Gradient(
+                    WindowColor.Gradient(
                         argbStart = 0xF0181C2A,
                         argbEnd = 0xF02B233D
                     )
@@ -512,7 +526,7 @@ class DummyRenderer(context: EntityRendererProvider.Context) : HumanoidMobRender
                         textScale = 2.5f
                     )
                     .addSeparator(
-                        color = AnimatedGradient(
+                        color = WindowColor.AnimatedGradient(
                             argbStart = 0xFF67E8F9,
                             argbEnd = 0xFF8B5CF6,
                             speed = 1.2f,
@@ -539,14 +553,14 @@ class DummyRenderer(context: EntityRendererProvider.Context) : HumanoidMobRender
                     }
                 }",
                 color = if (damageData.isCriticalHit) {
-                    AnimatedGradient(
+                    WindowColor.AnimatedGradient(
                         argbStart = 0xFF0000,
                         argbEnd = 0xff8c00,
                         speed = 5.0f,
                         scale = 0.8f
                     )
                 } else {
-                    Pulse(0xFF9BE7FF)
+                    WindowColor.Pulse(0xFF9BE7FF)
                 },
                 shadow = true,
                 alignment = WindowElement.Text.TextAlignment.CENTER,
@@ -562,7 +576,7 @@ class DummyRenderer(context: EntityRendererProvider.Context) : HumanoidMobRender
                     shadow = true,
                     alignment = WindowElement.Text.TextAlignment.CENTER,
                     textScale = 0.8f,
-                    color = Pulse(color = 0xff1a1a, speed = 1.5f)
+                    color = WindowColor.Pulse(color = 0xff1a1a, speed = 1.5f)
                 )
 
             }
@@ -570,7 +584,7 @@ class DummyRenderer(context: EntityRendererProvider.Context) : HumanoidMobRender
             if (damageData.isReductions()) {
 
                 window.addSeparator(
-                    color = AnimatedGradient(
+                    color = WindowColor.AnimatedGradient(
                         argbStart = 0xFF67E8F9,
                         argbEnd = 0xFF8B5CF6,
                         speed = 1.2f,
@@ -648,7 +662,7 @@ class DummyRenderer(context: EntityRendererProvider.Context) : HumanoidMobRender
                 }
 
                 window.addSeparator(
-                    color = AnimatedGradient(
+                    color = WindowColor.AnimatedGradient(
                         argbStart = 0xFF67E8F9,
                         argbEnd = 0xFF8B5CF6,
                         speed = 1.2f,
@@ -689,7 +703,7 @@ class DummyRenderer(context: EntityRendererProvider.Context) : HumanoidMobRender
                 .setPadding(3f)
                 .setCornerRadius(3f)
                 .setBorder(
-                    AnimatedGradient(
+                    WindowColor.AnimatedGradient(
                         argbStart = 0xFFC5A5FB,
                         argbEnd = 0xFF5700AC,
                         speed = 1.2f,
@@ -698,7 +712,7 @@ class DummyRenderer(context: EntityRendererProvider.Context) : HumanoidMobRender
                     width = 0.75f
                 )
                 .setBackground(
-                    Gradient(
+                    WindowColor.Gradient(
                         argbStart = 0xF0181C2A,
                         argbEnd = 0xF02B233D
                     )
@@ -751,14 +765,14 @@ class DummyRenderer(context: EntityRendererProvider.Context) : HumanoidMobRender
             window.addSeparator(color = modeWindowSeparator(), thickness = 0.5f, margin = 2f)
                 .addText(
                     Component.literal(String.format(Locale.ROOT, "%.1f", damage)),
-                    color = Pulse(0xFF9BE7FF),
+                    color = WindowColor.Pulse(0xFF9BE7FF),
                     shadow = true,
                     textScale = 2f,
                     alignment = WindowElement.Text.TextAlignment.CENTER
                 )
         }
 
-        private fun modeWindowSeparator(): AnimatedGradient = AnimatedGradient(
+        private fun modeWindowSeparator(): WindowColor.AnimatedGradient = WindowColor.AnimatedGradient(
             argbStart = 0xFF67E8F9,
             argbEnd = 0xFF8B5CF6,
             speed = 1.2f,
@@ -771,6 +785,7 @@ class DummyRenderer(context: EntityRendererProvider.Context) : HumanoidMobRender
             entity: DummyEntity,
             title: Component = Component.translatable("message.trainingdummy.damage_title")
         ) {
+
             window.attachToEntityRotation(entity)
                 .setOffset(0.6, 2.0, 0.0)
                 .setSize(24f, 24f, autoScaleContent = true, autoFitWidth = true, autoFitHeight = true)
@@ -778,7 +793,7 @@ class DummyRenderer(context: EntityRendererProvider.Context) : HumanoidMobRender
                 .setPadding(1f)
                 .setCornerRadius(3f)
                 .setBorder(
-                    AnimatedGradient(
+                    WindowColor.AnimatedGradient(
                         argbStart = 0xFF67E8F9,
                         argbEnd = 0xFF8B5CF6,
                         speed = 1.2f,
@@ -787,14 +802,14 @@ class DummyRenderer(context: EntityRendererProvider.Context) : HumanoidMobRender
                     width = 0.75f
                 )
                 .setBackground(
-                    Gradient(
+                    WindowColor.Gradient(
                         argbStart = 0xF0181C2A,
                         argbEnd = 0xF02B233D
                     )
                 )
                 .addText(title, color = 0xFF9BE7FF.toInt(), shadow = true)
                 .addSeparator(
-                    color = AnimatedGradient(
+                    color = WindowColor.AnimatedGradient(
                         argbStart = 0xFF67E8F9,
                         argbEnd = 0xFF8B5CF6,
                         speed = 1.2f,
@@ -813,7 +828,7 @@ class DummyRenderer(context: EntityRendererProvider.Context) : HumanoidMobRender
                         String.format(Locale.ROOT, "%.1f", damageData.originalDamage)
                     ).withStyle(ChatFormatting.RED)
                 )
-                    .addSeparator(color = Rainbow(speed = 1.0f), thickness = 0.5f, margin = 2f)
+                    .addSeparator(color = WindowColor.Rainbow(speed = 1.0f), thickness = 0.5f, margin = 2f)
                     .addText(Component.translatable("message.trainingdummy.reductions"), color = 0x0087F0.toInt())
             } else {
                 window.setPadding(3f);
@@ -849,7 +864,7 @@ class DummyRenderer(context: EntityRendererProvider.Context) : HumanoidMobRender
             }
 
             if (damageData.isReductions()) {
-                window.addSeparator(color = Rainbow(speed = 1.0f), thickness = 0.5f, margin = 2f)
+                window.addSeparator(color = WindowColor.Rainbow(speed = 1.0f), thickness = 0.5f, margin = 2f)
                 finalDamage = Component.translatable(
                     "message.trainingdummy.final_damage_value",
                     String.format(Locale.ROOT, "%.1f", damageData.newDamage)
@@ -866,7 +881,7 @@ class DummyRenderer(context: EntityRendererProvider.Context) : HumanoidMobRender
                             String.format(Locale.ROOT, "%.1f", damageData.damageMultiplier)
                         )
                     ),
-                    color = AnimatedGradient(
+                    color = WindowColor.AnimatedGradient(
                         argbStart = 0xFF0000, // Cor inicial (Branco)
                         argbEnd = 0xFFFFFF,   // Cor final (Vermelho)
                         speed = 5.0f,          // Velocidade do deslocamento
