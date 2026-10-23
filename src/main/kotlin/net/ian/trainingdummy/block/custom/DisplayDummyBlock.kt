@@ -3,6 +3,8 @@ package net.ian.trainingdummy.block.custom
 import com.mojang.serialization.MapCodec
 import net.ian.trainingdummy.block.entityblock.DisplayDummyBlockEntity
 import net.minecraft.core.BlockPos
+import net.minecraft.core.component.DataComponents
+import net.minecraft.world.item.component.CustomData
 import net.minecraft.core.Direction
 import net.minecraft.world.entity.item.ItemEntity
 import net.minecraft.world.entity.player.Player
@@ -33,6 +35,7 @@ class DisplayDummyBlock(properties: Properties) : BaseEntityBlock(properties) {
                 .setValue(FACE, AttachFace.FLOOR)
         )
     }
+
 
     companion object {
         val CODEC: MapCodec<DisplayDummyBlock> = simpleCodec(::DisplayDummyBlock)
@@ -200,6 +203,17 @@ class DisplayDummyBlock(properties: Properties) : BaseEntityBlock(properties) {
             val stack = ItemStack(this)
 
             blockEntity.saveToItem(stack, level.registryAccess())
+            blockEntity.target_entity_uuid?.let { uuid ->
+                CustomData.update(DataComponents.CUSTOM_DATA, stack) { tag ->
+                    tag.putString("dummy_uuid", uuid.toString())
+                    blockEntity.dummy_name?.let { tag.putString("dummy_name", it) }
+                    blockEntity.dummy_x?.let { tag.putDouble("dummy_x", it) }
+                    blockEntity.dummy_y?.let { tag.putDouble("dummy_y", it) }
+                    blockEntity.dummy_z?.let { tag.putDouble("dummy_z", it) }
+                    blockEntity.dummy_dim?.let { tag.putString("dummy_dimension", it) }
+                    blockEntity.dummy_mode?.let { tag.putString("dummy_mode", it) }
+                }
+            }
 
             val itemEntity = ItemEntity(
                 level,

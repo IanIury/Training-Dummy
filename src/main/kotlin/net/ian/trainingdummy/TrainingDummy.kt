@@ -10,7 +10,10 @@ import net.ian.trainingdummy.item.ModCreativeModelTabs
 import net.ian.trainingdummy.item.ModItems
 import net.ian.trainingdummy.network.ServerboundChangeModePayload
 import net.ian.trainingdummy.network.ServerboundDummyManagementActionPayload
+import net.ian.trainingdummy.network.ClientboundRanksPayload
+import net.ian.trainingdummy.network.ServerboundRequestRanksPayload
 import net.ian.trainingdummy.network.ServerboundSetDetailedDamageWindowPayload
+import net.ian.trainingdummy.network.ServerboundSetWindowShapePayload
 import net.ian.trainingdummy.screen.ModMenuTypes
 import net.ian.trainingdummy.server.ServerSetup
 import net.minecraft.client.Minecraft
@@ -98,6 +101,21 @@ object TrainingDummy {
             ServerboundDummyManagementActionPayload.TYPE,
             ServerboundDummyManagementActionPayload.STREAM_CODEC,
             ServerboundDummyManagementActionPayload::handle
+        )
+        registrar.playToServer(
+            ServerboundSetWindowShapePayload.TYPE,
+            ServerboundSetWindowShapePayload.STREAM_CODEC,
+            ServerboundSetWindowShapePayload::handle
+        )
+        registrar.playToServer(
+            ServerboundRequestRanksPayload.TYPE,
+            ServerboundRequestRanksPayload.STREAM_CODEC,
+            ServerboundRequestRanksPayload::handle
+        )
+        registrar.playToClient(
+            ClientboundRanksPayload.TYPE,
+            ClientboundRanksPayload.STREAM_CODEC,
+            ClientboundRanksPayload::handle
         )
     }
 

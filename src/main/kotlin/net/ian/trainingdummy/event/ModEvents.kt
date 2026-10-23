@@ -4,6 +4,8 @@ import net.ian.trainingdummy.TrainingDummy
 import net.ian.trainingdummy.block.entityblock.DummyManagementBlockEntity
 import net.ian.trainingdummy.entity.DummyEntity
 import net.ian.trainingdummy.event.utils.DamageData
+import net.ian.trainingdummy.rank.DummyRankData
+import net.minecraft.server.level.ServerPlayer
 import net.minecraft.util.Mth
 import net.minecraft.world.entity.player.Player
 import net.minecraft.world.item.ItemStack
@@ -44,6 +46,15 @@ object ModEvents {
             absorption = event.getReduction(Reduction.ABSORPTION),
             innateResistance = event.getReduction(Reduction.INNATE_RESISTANCE)
         )
+
+        // Ranking: somente golpes de jogadores em dummies com módulo de treino instalado
+        val attackerPlayer = event.source.entity as? ServerPlayer
+        vitima.lastAttackerUuid = attackerPlayer?.uuid
+        vitima.lastAttackerName = attackerPlayer?.gameProfile?.name
+        if (attackerPlayer != null && vitima.hasTrainingModule()) {
+            DummyRankData.get(attackerPlayer.server)
+                .recordHit(attackerPlayer.uuid, attackerPlayer.gameProfile.name, event.newDamage)
+        }
 
         //vitima.entityData.set(DummyEntity.DAMAGE_DATA,damaData)
         vitima.onCustomDamageReceived(newDamaData)

@@ -7,6 +7,8 @@ import net.ian.trainingdummy.event.utils.DamageData
 import net.ian.trainingdummy.init.components.ModDataComponents
 import net.ian.trainingdummy.init.components.TrainingModuleConfig
 import net.ian.trainingdummy.init.enums.TrainingModos
+import net.ian.trainingdummy.init.enums.WindowShapeType
+import net.ian.trainingdummy.rank.DummyRankData
 import net.ian.trainingdummy.init.serializers.ModDataSerializers
 import net.ian.trainingdummy.item.ModItems
 import net.ian.trainingdummy.item.custom.DisplayDummyBlockItem
@@ -47,6 +49,7 @@ import net.minecraft.world.level.block.entity.SkullBlockEntity
 import net.minecraft.world.phys.Vec3
 import net.neoforged.neoforge.items.ItemStackHandler
 import java.util.Optional
+import java.util.UUID
 import kotlin.math.cos
 import kotlin.math.sin
 
@@ -86,7 +89,18 @@ open class DummyEntity(
         get() = entityData.get(DETAILED_DAMAGE_WINDOW)
         set(value) = entityData.set(DETAILED_DAMAGE_WINDOW, value)
 
+    /** Formato geométrico da janela flutuante (sincronizado com o cliente e salvo no NBT). */
+    var windowShape: WindowShapeType
+        get() = WindowShapeType.byId(entityData.get(WINDOW_SHAPE))
+        set(value) = entityData.set(WINDOW_SHAPE, value.ordinal)
+
     var preDamageData: DamageData = DamageData()
+
+    // Último jogador que atacou (preenchido no servidor antes de onCustomDamageReceived) e dono do teste de DPS atual
+    var lastAttackerUuid: UUID? = null
+    var lastAttackerName: String? = null
+    private var dpsOwnerUuid: UUID? = null
+    private var dpsOwnerName: String? = null
 
     var damageStack : ItemStack
         get() = entityData.get(DAMAGE_ITEMSTACK)
@@ -153,6 +167,7 @@ open class DummyEntity(
         builder.define(DPS_HIT_COUNT, 0)
         builder.define(DPS_HIGHEST_HIT, 0f)
         builder.define(DETAILED_DAMAGE_WINDOW, false)
+        builder.define(WINDOW_SHAPE, WindowShapeType.DEFAULT.ordinal)
 
     }
 
@@ -584,6 +599,8 @@ open class DummyEntity(
             TrainingModos.DPS -> {
                 when (dpsTestState) {
                     DPS_STATE_READY -> {
+                        dpsOwnerUuid = lastAttackerUuid
+                        dpsOwnerName = lastAttackerName
                         dpsTotalDamage = 0f
                         dpsHitCount = 0
                         dpsHighestHit = 0f
@@ -635,6 +652,7 @@ open class DummyEntity(
                 DPS_STATE_MEASURING -> {
                     dpsTicksRemaining = (dpsTicksRemaining - 1).coerceAtLeast(0)
                     if (dpsTicksRemaining == 0) {
+                        submitDpsRank()
                         dpsTicksRemaining = DPS_RESULT_DURATION_TICKS
                         dpsTestState = DPS_STATE_COOLDOWN
                     }
@@ -649,6 +667,34 @@ open class DummyEntity(
                     }
                 }
             }
+        }
+    }
+
+    /** `true` quando há um módulo de treino instalado (somente nesse caso os golpes valem para o ranking). */
+    fun hasTrainingModule(): Boolean =
+        dummyInventory.getStackInSlot(TRAINING_MODULE_SLOT).`is`(ModItems.TRAINING_MODULE_ITEM)
+
+    /** Envia o resultado do teste de DPS que acabou de terminar para o ranking persistente do mundo. */
+    private fun submitDpsRank() {
+        val owner = dpsOwnerUuid ?: return
+        val name = dpsOwnerName ?: return
+        dpsOwnerUuid = null
+        dpsOwnerName = null
+
+        val serverLevel = level() as? ServerLevel ?: return
+        val dps = dpsTotalDamage / (DPS_TEST_DURATION_TICKS / 20f)
+        if (dps <= 0f) return
+
+        val server = serverLevel.server
+        val data = DummyRankData.get(server)
+        if (data.recordDps(owner, name, dps)) {
+            server.playerList.getPlayer(owner)?.displayClientMessage(
+                Component.translatable(
+                    "message.trainingdummy.rank.new_best_dps",
+                    String.format(java.util.Locale.ROOT, "%.1f", dps)
+                ),
+                true
+            )
         }
     }
 
@@ -708,6 +754,7 @@ open class DummyEntity(
         compoundTag.remove(LEGACY_DUMMY_INVENTORY_TAG)
         compoundTag.put(DUMMY_INVENTORY_TAG, dummyInventory.serializeNBT(level().registryAccess()))
         compoundTag.putBoolean(DETAILED_DAMAGE_WINDOW_TAG, detailedDamageWindow)
+        compoundTag.putInt(WINDOW_SHAPE_TAG, windowShape.ordinal)
 
         val registryContext = registryAccess().createSerializationContext(NbtOps.INSTANCE)
 
@@ -726,6 +773,11 @@ open class DummyEntity(
     override fun readAdditionalSaveData(compoundTag: CompoundTag) {
         super.readAdditionalSaveData(compoundTag)
         detailedDamageWindow = compoundTag.getBoolean(DETAILED_DAMAGE_WINDOW_TAG)
+        windowShape = if (compoundTag.contains(WINDOW_SHAPE_TAG)) {
+            WindowShapeType.byId(compoundTag.getInt(WINDOW_SHAPE_TAG))
+        } else {
+            WindowShapeType.DEFAULT
+        }
 
         val inventoryTag = when {
             compoundTag.contains(DUMMY_INVENTORY_TAG) -> compoundTag.getCompound(DUMMY_INVENTORY_TAG)
@@ -770,6 +822,23 @@ open class DummyEntity(
             OFF_HAND_INVENTORY_SLOT -> EquipmentSlot.OFFHAND
             else -> null
         }
+
+    override fun isCurrentlyGlowing(): Boolean {
+        if (super.isCurrentlyGlowing()) return true
+        if (this.level().isClientSide) {
+            return net.ian.trainingdummy.client.DisplayDummyClientUtil.isDummyTargetedByPlayer(this.uuid)
+        }
+        return false
+    }
+
+    override fun getTeamColor(): Int {
+        if (this.level().isClientSide) {
+            if (net.ian.trainingdummy.client.DisplayDummyClientUtil.isDummyTargetedByPlayer(this.uuid)) {
+                return 0x00E5FF
+            }
+        }
+        return super.getTeamColor()
+    }
 
 
     // ========================================================================
@@ -823,6 +892,9 @@ open class DummyEntity(
         val DETAILED_DAMAGE_WINDOW: EntityDataAccessor<Boolean> =
             SynchedEntityData.defineId(DummyEntity::class.java, EntityDataSerializers.BOOLEAN)
 
+        val WINDOW_SHAPE: EntityDataAccessor<Int> =
+            SynchedEntityData.defineId(DummyEntity::class.java, EntityDataSerializers.INT)
+
 
         private const val HEAD_INVENTORY_SLOT = 0
         private const val CHEST_INVENTORY_SLOT = 1
@@ -833,6 +905,7 @@ open class DummyEntity(
         private const val OFF_HAND_INVENTORY_SLOT = 6
         private const val DUMMY_INVENTORY_TAG = "trainingdummy:DummyInventory"
         private const val DETAILED_DAMAGE_WINDOW_TAG = "trainingdummy:DetailedDamageWindow"
+        private const val WINDOW_SHAPE_TAG = "trainingdummy:WindowShape"
         private const val PROFILE_TAG = "trainingdummy:ProfilePlayer"
         private const val LEGACY_DUMMY_INVENTORY_TAG = "DummyInventory"
         private const val LEGACY_PROFILE_TAG = "ProfilePlayer"

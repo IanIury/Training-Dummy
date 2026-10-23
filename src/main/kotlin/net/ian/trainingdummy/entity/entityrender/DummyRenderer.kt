@@ -1,18 +1,25 @@
 package net.ian.trainingdummy.entity.entityrender
 
-
 import com.mojang.blaze3d.vertex.PoseStack
+import com.mojang.blaze3d.vertex.VertexConsumer
+import org.joml.Matrix4f
+import dev.ian.worldpanel.FloatingText
 import dev.ian.worldpanel.FloatingWindow
+import dev.ian.worldpanel.TextRenderMode
 import dev.ian.worldpanel.WindowAlignment
 import dev.ian.worldpanel.WindowColor
 import dev.ian.worldpanel.WindowElement
 import dev.ian.worldpanel.shape.PanelShape
+import net.ian.trainingdummy.client.gui.WindowShapes
+import net.ian.trainingdummy.init.enums.WindowShapeType
 import dev.ian.worldpanel.shape.TextureFitMode
 import dev.ian.worldpanel.region.RegionMap
 import dev.ian.worldpanel.layout.ContentLayout
 import dev.ian.worldpanel.depth.DepthStyle
 import dev.ian.worldpanel.shape.RectF
+import dev.ian.worldpanel.shape.Volume3DConfig
 
+import net.ian.trainingdummy.client.DisplayDummyClientUtil
 import net.ian.trainingdummy.TrainingDummy
 import net.ian.trainingdummy.client.layer.DummyCustomHeadLayer
 import net.ian.trainingdummy.client.layer.DummyElytraLayer
@@ -83,6 +90,7 @@ class DummyRenderer(context: EntityRendererProvider.Context) : HumanoidMobRender
         this.addLayer(DummyCustomHeadLayer(this, context.modelSet, context.itemInHandRenderer))
         this.addLayer(DummyElytraLayer(this, context.modelSet))
         this.addLayer(DummyFaceLayer(this, context.modelSet))
+        this.addLayer(HandHologramLayer())
 
         //this.addLayer(DummyOutlineLayer(this))
     }
@@ -121,6 +129,116 @@ class DummyRenderer(context: EntityRendererProvider.Context) : HumanoidMobRender
                 LivingEntityRenderer.getOverlayCoords(entity, 0f),
                 color
             )
+        }
+    }
+
+    private inner class HandHologramLayer : RenderLayer<DummyEntity, DummyModel>(this@DummyRenderer) {
+        override fun render(
+            poseStack: PoseStack,
+            buffer: MultiBufferSource,
+            packedLight: Int,
+            entity: DummyEntity,
+            limbSwing: Float,
+            limbSwingAmount: Float,
+            partialTick: Float,
+            ageInTicks: Float,
+            netHeadYaw: Float,
+            headPitch: Float
+        ) {
+            if (!DisplayDummyClientUtil.isRenderingHandHologram) return
+
+            val time = entity.tickCount + partialTick
+            val texture = getTextureLocation(entity)
+            val baseConsumer = buffer.getBuffer(RenderType.entityTranslucentEmissive(texture))
+
+            val gradientConsumer = HologramGradientVertexConsumer(
+                delegate = baseConsumer,
+                time = time,
+                gradientStartY = 0.0f,
+                gradientEndY = 0.95f
+            )
+
+            val overlay = LivingEntityRenderer.getOverlayCoords(entity, 0f)
+
+            parentModel.renderToBuffer(poseStack, gradientConsumer, 15728880, overlay, -1)
+        }
+    }
+
+    private class HologramGradientVertexConsumer(
+        private val delegate: VertexConsumer,
+        private val time: Float,
+        private val gradientStartY: Float = 0.0f,
+        private val gradientEndY: Float = 0.95f
+    ) : VertexConsumer {
+
+        private var currentWorldY: Float = 0.0f
+
+        override fun addVertex(x: Float, y: Float, z: Float): VertexConsumer {
+            currentWorldY = y
+            delegate.addVertex(x, y, z)
+            return this
+        }
+
+        override fun addVertex(matrix: Matrix4f, x: Float, y: Float, z: Float): VertexConsumer {
+            // Calcula a altura vertical Y real do vértice aplicando a matriz de transformação do PoseStack
+            currentWorldY = matrix.m01() * x + matrix.m11() * y + matrix.m21() * z + matrix.m31()
+            delegate.addVertex(matrix, x, y, z)
+            return this
+        }
+
+        override fun setColor(r: Int, g: Int, b: Int, a: Int): VertexConsumer {
+            val y = currentWorldY
+            val t = when {
+                y <= gradientStartY -> 1.0f
+                y >= gradientEndY -> 0.0f
+                else -> 1.0f - ((y - gradientStartY) / (gradientEndY - gradientStartY))
+            }
+
+            if (t <= 0.0f) {
+                // Acima da metade do torso: completamente transparente (sem efeito de holograma)
+                delegate.setColor(0, 0, 0, 0)
+                return this
+            }
+
+            // Suavização do gradiente (smoothstep)
+            val smoothT = t * t * (3.0f - 2.0f * t)
+
+            // Efeito sutil de linhas de varredura (scanlines) e pulso animado em tempo real
+            val scanline = 0.92f + 0.08f * kotlin.math.sin(time * 0.35f - y * 14.0f)
+            val pulse = 0.90f + 0.10f * kotlin.math.sin(time * 0.2f)
+
+            // Opacidade máxima na base (~85%), decrescendo suavemente até 0% na cintura/metade do torso
+            val finalAlpha = (smoothT * 0.88f * scanline * pulse).coerceIn(0.0f, 1.0f)
+            val alphaInt = (finalAlpha * 255).toInt()
+
+            // Cor holográfica ciano luminosa (gradiente suave de 0x38BDF8 na base para 0x67E8F9)
+            val holoR = ((0x38 * smoothT + 0x67 * (1.0f - smoothT))).toInt().coerceIn(0, 255)
+            val holoG = ((0xBD * smoothT + 0xE8 * (1.0f - smoothT))).toInt().coerceIn(0, 255)
+            val holoB = 0xF8
+
+            delegate.setColor(holoR, holoG, holoB, alphaInt)
+            return this
+        }
+
+        override fun setUv(u: Float, v: Float): VertexConsumer {
+            delegate.setUv(u, v)
+            return this
+        }
+
+        override fun setUv1(u: Int, v: Int): VertexConsumer {
+            delegate.setUv1(u, v)
+            return this
+        }
+
+        override fun setUv2(u: Int, v: Int): VertexConsumer {
+            // Brilho emissivo máximo para o holograma
+            delegate.setUv2(240, 240)
+            return this
+        }
+
+        override fun setNormal(x: Float, y: Float, z: Float): VertexConsumer {
+            delegate.setNormal(x, y, z)
+            return this
         }
     }
 
@@ -173,12 +291,81 @@ class DummyRenderer(context: EntityRendererProvider.Context) : HumanoidMobRender
 
         super.render(entity, entityYaw, partialTicks, poseStack, buffer, packedLight)
 
-        renderFloatingWindowModo(entity, partialTicks, poseStack, buffer, packedLight)
+        if (!DisplayDummyClientUtil.isRenderingHandHologram) {
+            renderFloatingWindowModo(entity, partialTicks, poseStack, buffer, packedLight)
+        }
 
+    }
+
+    override fun shouldRender(
+        entity: DummyEntity,
+        camera: net.minecraft.client.renderer.culling.Frustum,
+        camX: Double,
+        camY: Double,
+        camZ: Double
+    ): Boolean {
+        // Expande a bounding box para não sofrer culling quando olhar para o letreiro/janela no alto
+        val expandedBox = entity.boundingBox.inflate(1.5, 3.5, 1.5)
+        return camera.isVisible(expandedBox)
     }
 
 
     companion object {
+
+        fun windowDefault3(window: FloatingWindow.Builder, entity: DummyEntity) {
+            window
+                .setOffset(0.0, 2.8, 0.0)
+                .setScale(0.03f)
+                .attachToEntityRotation(entity)
+                .setAlignment(WindowAlignment.CENTER)
+                .setBackground(WindowColor.Gradient(0xFFFFFFFF,0x3C3C3CAA))
+                .setVolume3D(Volume3DConfig.DEFAULT) // Ativa o relevo 3D
+
+
+                // Primeira linha: título animado
+                .addText(
+                    text = "★ MESTRE DAS ARMAS ★",
+                    color = WindowColor.Rainbow(speed = 0.8f),
+                    shadow = true,
+                    textScale = 1.3f
+                )
+                // Segunda linha: subtítulo com componente translatável
+                .addText(
+                    component = Component.literal("Nível 100"),
+                    color = WindowColor.Solid(0xFFFBBF24),
+                    shadow = true,
+                    textScale = 0.9f
+                )
+                .build()
+                /*
+                .textOnly() // Remove fundo, bordas, padding e sombras!
+                .setFaceCamera(true)
+                .setOffset(0.0, 2.0, 0.0)
+                .setScale(0.025f)
+                .setAlignment(WindowAlignment.CENTER)
+
+                // Texto 3D extrudado
+                .addText(
+                    text = "RECOMPENSA",
+                    color = WindowColor.Solid(0xFF38BDF8),
+                    renderMode = TextRenderMode.EXTRUDED_3D,
+                    extrusionDepth = 0.7f,
+                    textScale = 1.2f,
+                    shadow = true
+                )
+                // Linha com ícone de item e texto
+                .addItemText(
+                    stack = Items.DIAMOND.defaultInstance,
+                    text = "x64 Diamantes",
+                    color = 0xFF67E8F9.toInt(),
+                    itemSize = 12f,
+                    textScale = 1.0f
+                )
+                .build()
+            */
+
+        }
+
         fun renderFloatingWindowModo(
             entity: DummyEntity,
             partialTicks: Float,
@@ -202,7 +389,7 @@ class DummyRenderer(context: EntityRendererProvider.Context) : HumanoidMobRender
             when (modoAtual) {
 
                 TrainingModos.DEFAULT -> {
-                    //windowDefaultDog(window)
+                   // windowDefault3(window,entity)
 
                     windowConfigDefault(
                         window,
@@ -210,6 +397,7 @@ class DummyRenderer(context: EntityRendererProvider.Context) : HumanoidMobRender
                         detailed = entity.detailedDamageWindow,
                         projection = projection
                     )
+
 
 
                 }
@@ -221,11 +409,11 @@ class DummyRenderer(context: EntityRendererProvider.Context) : HumanoidMobRender
                         window.setFaceCamera(true)
                             .setOffset(projection.x, projection.y, projection.z)
                     }
+                    applyWindowShape(window, entity)
                     window
                         .setAlignment(WindowAlignment.CENTER)
                         .setPadding(2f)
                         .setSize(38f, 30f, autoScaleContent = true, autoFitWidth = true, autoFitHeight = true)
-                        .setCornerRadius(3f)
 
                         .setBorder(
                             when (entity.dpsTestState) {
@@ -488,7 +676,10 @@ class DummyRenderer(context: EntityRendererProvider.Context) : HumanoidMobRender
                 window.setFaceCamera(true)
                     .setOffset(projection.x, projection.y, projection.z)
             }
-            window.setShape(PanelShape.circle())
+
+            applyWindowShape(window, entity)
+
+
             window.setSize(30f, 30f, autoScaleContent = true, autoFitWidth = true, autoFitHeight = true)
                 .setAlignment(WindowAlignment.CENTER)
                 .setPadding(3f)
@@ -676,6 +867,22 @@ class DummyRenderer(context: EntityRendererProvider.Context) : HumanoidMobRender
 
         }
 
+        /** Aplica à janela o formato geométrico escolhido no menu do dummy. */
+        private fun applyWindowShape(window: FloatingWindow.Builder, entity: DummyEntity) {
+            when (val type = entity.windowShape) {
+                WindowShapeType.ROUNDED -> {
+                    window.setCornerRadius(3f)
+                }
+                WindowShapeType.ROUNDED_RECTANGLE -> {
+                    window.setCornerRadius(8f)
+                    window.setShape(WindowShapes.toPanelShape(type))
+                }
+                else -> {
+                    window.setShape(WindowShapes.toPanelShape(type))
+                }
+            }
+        }
+
         private fun configureModeWindow(
             window: FloatingWindow.Builder,
             entity: DummyEntity,
@@ -698,10 +905,10 @@ class DummyRenderer(context: EntityRendererProvider.Context) : HumanoidMobRender
                         projection.z + projectionOffsetX * projection.rightZ
                     )
             }
+            applyWindowShape(window, entity)
             window.setSize(width, height, autoScaleContent = true, autoFitWidth = true, autoFitHeight = true)
                 .setAlignment(WindowAlignment.CENTER)
                 .setPadding(3f)
-                .setCornerRadius(3f)
                 .setBorder(
                     WindowColor.AnimatedGradient(
                         argbStart = 0xFFC5A5FB,

@@ -17,6 +17,7 @@ import net.minecraft.client.renderer.blockentity.BlockEntityRenderer
 import net.minecraft.client.renderer.blockentity.BlockEntityRendererProvider
 import net.minecraft.core.Direction
 import net.minecraft.world.level.block.state.properties.AttachFace
+import net.minecraft.world.phys.AABB
 import org.joml.Vector3f
 import java.util.UUID
 import java.util.WeakHashMap
@@ -24,6 +25,19 @@ import java.util.WeakHashMap
 class DisplayDummyBlockEntityRenderer(context: BlockEntityRendererProvider.Context) :
     BlockEntityRenderer<DisplayDummyBlockEntity> {
     private val targetCache = WeakHashMap<DisplayDummyBlockEntity, CachedTarget>()
+
+
+    override fun shouldRenderOffScreen(blockEntity: DisplayDummyBlockEntity): Boolean {
+        return true
+    }
+
+    override fun getViewDistance(): Int {
+        return 128 // Distância máxima em blocos para renderizar
+    }
+
+    override fun getRenderBoundingBox(blockEntity: DisplayDummyBlockEntity): AABB {
+        return AABB(blockEntity.blockPos).inflate(3.0, 6.0, 3.0)
+    }
 
     override fun render(
         pBlockEntity: DisplayDummyBlockEntity,
