@@ -1,0 +1,9 @@
+{
+  "model": {
+    "type": "minecraft:special",
+    "base": "trainingdummy:item/dummy_item_spawn",
+    "model": {
+      "type": "trainingdummy:dummy"
+    }
+  }
+}

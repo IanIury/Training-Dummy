@@ -1,0 +1,6 @@
+{
+  "model": {
+    "type": "minecraft:model",
+    "model": "trainingdummy:block/dummy_management_block"
+  }
+}
