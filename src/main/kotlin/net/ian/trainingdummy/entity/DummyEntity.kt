@@ -7,15 +7,15 @@ import net.ian.trainingdummy.event.utils.DamageData
 import net.ian.trainingdummy.init.components.ModDataComponents
 import net.ian.trainingdummy.init.components.TrainingModuleConfig
 import net.ian.trainingdummy.init.enums.TrainingModos
+import net.ian.trainingdummy.init.enums.WindowShapeType
 import net.ian.trainingdummy.init.serializers.ModDataSerializers
 import net.ian.trainingdummy.item.ModItems
 import net.ian.trainingdummy.item.custom.DisplayDummyBlockItem
 import net.ian.trainingdummy.item.custom.TrainingModuleItem
+import net.ian.trainingdummy.rank.DummyRankData
 import net.ian.trainingdummy.screen.custom.DummyMenu
 import net.minecraft.core.NonNullList
 import net.minecraft.core.component.DataComponents
-import net.minecraft.nbt.CompoundTag
-import net.minecraft.nbt.NbtOps
 import net.minecraft.network.chat.Component
 import net.minecraft.network.syncher.EntityDataAccessor
 import net.minecraft.network.syncher.EntityDataSerializers
@@ -27,6 +27,8 @@ import net.minecraft.sounds.SoundEvents
 import net.minecraft.util.Mth
 import net.minecraft.world.InteractionHand
 import net.minecraft.world.InteractionResult
+import net.minecraft.world.ItemStackWithSlot
+import net.minecraft.world.SimpleContainer
 import net.minecraft.world.SimpleMenuProvider
 import net.minecraft.world.damagesource.DamageSource
 import net.minecraft.world.damagesource.DamageTypes
@@ -43,12 +45,57 @@ import net.minecraft.world.item.Items
 import net.minecraft.world.item.component.ItemContainerContents
 import net.minecraft.world.item.component.ResolvableProfile
 import net.minecraft.world.level.Level
-import net.minecraft.world.level.block.entity.SkullBlockEntity
+import net.minecraft.world.level.storage.ValueInput
+import net.minecraft.world.level.storage.ValueOutput
 import net.minecraft.world.phys.Vec3
-import net.neoforged.neoforge.items.ItemStackHandler
 import java.util.Optional
+import java.util.UUID
 import kotlin.math.cos
 import kotlin.math.sin
+
+open class DummyInventory(size: Int = 7) : SimpleContainer(size) {
+    val slots: Int
+        get() = containerSize
+
+    fun getStackInSlot(slot: Int): ItemStack = getItem(slot)
+
+    fun setStackInSlot(slot: Int, stack: ItemStack) {
+        setItem(slot, stack)
+    }
+
+    override fun setItem(slot: Int, stack: ItemStack) {
+        super.setItem(slot, stack)
+        onContentsChanged(slot)
+    }
+
+    open fun onContentsChanged(slot: Int) {}
+
+    open fun isItemValid(slot: Int, stack: ItemStack): Boolean = true
+
+    override fun canPlaceItem(slot: Int, stack: ItemStack): Boolean = isItemValid(slot, stack)
+
+    open fun getSlotLimit(slot: Int): Int = 64
+
+    fun serialize(output: ValueOutput) {
+        val list = output.list("Items", ItemStackWithSlot.CODEC)
+        for (i in 0 until containerSize) {
+            val stack = getItem(i)
+            if (!stack.isEmpty) {
+                list.add(ItemStackWithSlot(i, stack))
+            }
+        }
+        output.putInt("Size", containerSize)
+    }
+
+    fun deserialize(input: ValueInput) {
+        clearContent()
+        input.listOrEmpty("Items", ItemStackWithSlot.CODEC).forEach { itemWithSlot ->
+            if (itemWithSlot.isValidInContainer(containerSize)) {
+                setItem(itemWithSlot.slot(), itemWithSlot.stack())
+            }
+        }
+    }
+}
 
 open class DummyEntity(
     type: EntityType<out Mob>,
@@ -58,7 +105,6 @@ open class DummyEntity(
     // ========================================================================
     // PARTES E SUB-ENTIDADES
     // ========================================================================
-
 
     val rightArmPart = DummyPartEntity(this, DummyPartEntity.Companion.DummyPartType.RightArm, 0.15f, 0.75f)
     val leftArmPart = DummyPartEntity(this, DummyPartEntity.Companion.DummyPartType.LeftArm, 0.15f, 0.75f)
@@ -74,7 +120,7 @@ open class DummyEntity(
     val maceAnimation = DummyMaceAnimationState(this)
     val spawnAnimation = AnimationState()
 
-    var damageDataOld : DamageData
+    var damageDataOld: DamageData
         get() = entityData.get(DAMAGE_DATA_OLD)
         set(value) = entityData.set(DAMAGE_DATA_OLD, value)
 
@@ -86,15 +132,26 @@ open class DummyEntity(
         get() = entityData.get(DETAILED_DAMAGE_WINDOW)
         set(value) = entityData.set(DETAILED_DAMAGE_WINDOW, value)
 
+    /** Formato geométrico da janela flutuante (sincronizado com o cliente e salvo no NBT). */
+    var windowShape: WindowShapeType
+        get() = WindowShapeType.byId(entityData.get(WINDOW_SHAPE))
+        set(value) = entityData.set(WINDOW_SHAPE, value.ordinal)
+
     var preDamageData: DamageData = DamageData()
 
-    var damageStack : ItemStack
-        get() = entityData.get(DAMAGE_ITEMSTACK)
-        set(value) = entityData.set(DAMAGE_ITEMSTACK,value)
+    // Último jogador que atacou (preenchido no servidor antes de onCustomDamageReceived) e dono do teste de DPS atual
+    var lastAttackerUuid: UUID? = null
+    var lastAttackerName: String? = null
+    private var dpsOwnerUuid: UUID? = null
+    private var dpsOwnerName: String? = null
 
-    var damageStackOld : ItemStack
+    var damageStack: ItemStack
+        get() = entityData.get(DAMAGE_ITEMSTACK)
+        set(value) = entityData.set(DAMAGE_ITEMSTACK, value)
+
+    var damageStackOld: ItemStack
         get() = entityData.get(DAMAGE_ITEMSTACK_OLD)
-        set(value) = entityData.set(DAMAGE_ITEMSTACK_OLD,value)
+        set(value) = entityData.set(DAMAGE_ITEMSTACK_OLD, value)
 
     var displayTicks: Int
         get() = entityData.get(DISPLAY_TICKS)
@@ -153,10 +210,8 @@ open class DummyEntity(
         builder.define(DPS_HIT_COUNT, 0)
         builder.define(DPS_HIGHEST_HIT, 0f)
         builder.define(DETAILED_DAMAGE_WINDOW, false)
-
+        builder.define(WINDOW_SHAPE, WindowShapeType.DEFAULT.ordinal)
     }
-
-
 
     // ========================================================================
     // COMPORTAMENTO, MOVIMENTO E FÍSICA
@@ -169,19 +224,19 @@ open class DummyEntity(
     override fun push(x: Double, y: Double, z: Double) {}
     override fun doPush(entity: Entity) {}
     override fun pushEntities() {}
-    override fun knockback(strength: Double, x: Double, z: Double) {}
+    override fun knockback(strength: Double, x: Double, z: Double, source: DamageSource, fallDistance: Float) {}
+    override fun knockback(strength: Double, x: Double, z: Double, source: DamageSource, fallDistance: Float, applyModifiers: Boolean) {}
 
     // ========================================================================
     // DANO E EVENTOS
     // ========================================================================
 
-    override fun hurt(source: DamageSource, amount: Float): Boolean {
-        if (isInvulnerableTo(source) || level().isClientSide) {
+    override fun hurtServer(serverLevel: ServerLevel, source: DamageSource, amount: Float): Boolean {
+        if (isInvulnerableTo(serverLevel, source) || level().isClientSide) {
             return false
         }
-        val wasHurt = super.hurt(source, amount)
+        val wasHurt = super.hurtServer(serverLevel, source, amount)
         if (wasHurt) {
-
             if (source.`is`(DamageTypes.FELL_OUT_OF_WORLD) || source.`is`(DamageTypes.GENERIC_KILL)) {
                 return true
             }
@@ -216,7 +271,6 @@ open class DummyEntity(
                 }
             }
         }
-
     }
 
     override fun handleEntityEvent(id: Byte) {
@@ -232,11 +286,12 @@ open class DummyEntity(
 
     override fun remove(reason: Entity.RemovalReason) {
         // Se a entidade está sendo descartada por morte, dropa qualquer item residual que tenha sobrado nos slots
-        if (reason == Entity.RemovalReason.KILLED && !level().isClientSide) {
+        val sLevel = level() as? ServerLevel
+        if (reason == Entity.RemovalReason.KILLED && sLevel != null) {
             for (slot in EquipmentSlot.entries) {
                 val stack = getItemBySlot(slot)
                 if (!stack.isEmpty) {
-                    spawnAtLocation(stack)
+                    spawnAtLocation(sLevel, stack)
                     setItemSlot(slot, ItemStack.EMPTY)
                 }
             }
@@ -251,7 +306,7 @@ open class DummyEntity(
     override fun isMultipartEntity(): Boolean = true
 
     override fun getParts(): Array<DummyPartEntity> {
-        return arrayOf(rightArmPart, leftArmPart, basePart)
+        return subEntities
     }
 
     private fun updateArmPartPositions() {
@@ -285,8 +340,7 @@ open class DummyEntity(
     // CRIAÇÃO DE ITEM & PERSISTÊNCIA EM ITEMSTACK
     // ========================================================================
 
-
-    val dummyInventory = object : ItemStackHandler(7) {
+    val dummyInventory = object : DummyInventory(7) {
         override fun onContentsChanged(slot: Int) {
             super.onContentsChanged(slot)
 
@@ -314,8 +368,6 @@ open class DummyEntity(
 
         override fun getSlotLimit(slot: Int): Int =
             if (slot == MAIN_HAND_INVENTORY_SLOT || slot == OFF_HAND_INVENTORY_SLOT) 64 else 1
-
-
     }
 
     override fun getPickResult(): ItemStack? = createItemFromDummy()
@@ -349,15 +401,15 @@ open class DummyEntity(
         }
 
         itemStack.set(DataComponents.CONTAINER, ItemContainerContents.fromItems(itemsList))
-        itemStack.set(DataComponents.PROFILE,profilePlayer)
-        itemStack.set(DataComponents.CUSTOM_NAME, this.customName)
+        profilePlayer?.let { itemStack.set(DataComponents.PROFILE, it) }
+        this.customName?.let { itemStack.set(DataComponents.CUSTOM_NAME, it) }
 
         return itemStack
     }
 
     fun applyCompoundTagsFromItem(stack: ItemStack) {
+        stack.get(DataComponents.CUSTOM_NAME)?.let { this.customName = it }
         stack.get(DataComponents.PROFILE)?.let { this.profilePlayer = it }
-        stack.get(DataComponents.CUSTOM_NAME)?.let { super.customName = it }
     }
 
     fun applyCustomName(name: Component?) {
@@ -377,27 +429,19 @@ open class DummyEntity(
         }
     }
 
-    override fun dropCustomDeathLoot(serverLevel: ServerLevel, source: DamageSource, p_21387_: Boolean) {
+    override fun dropCustomDeathLoot(serverLevel: ServerLevel, source: DamageSource, recentlyHit: Boolean) {
         val dummyStack = createItemFromDummy()
         for (slot in 0 until dummyInventory.slots) {
             dummyInventory.setStackInSlot(slot, ItemStack.EMPTY)
         }
-        spawnAtLocation(dummyStack)
+        spawnAtLocation(serverLevel, dummyStack)
     }
 
     override fun mobInteract(player: Player, hand: InteractionHand): InteractionResult {
-
-        if (!this.isAlive) {
-            return InteractionResult.PASS
-        }
-
-        val heldItem = player.getItemInHand(hand)
-
         return InteractionResult.PASS
     }
 
-    override fun interactAt(player: Player, vec: Vec3, hand: InteractionHand): InteractionResult {
-
+    override fun interact(player: Player, hand: InteractionHand, vec: Vec3): InteractionResult {
         if (!this.isAlive) {
             return InteractionResult.PASS
         }
@@ -425,7 +469,7 @@ open class DummyEntity(
         }
 
         val itemEquipSlot = getEquipmentSlotForItem(heldItem)
-        val targetSlot = if (itemEquipSlot != null && itemEquipSlot.isArmor) itemEquipSlot else slotFromY
+        val targetSlot = if (itemEquipSlot.isArmor) itemEquipSlot else slotFromY
 
         if (swapItem(player, targetSlot, heldItem, hand)) {
             return InteractionResult.SUCCESS
@@ -442,14 +486,14 @@ open class DummyEntity(
                 nameText.equals("jeb_", ignoreCase = true) ||
                 nameText.equals("-endGateway-", ignoreCase = true) ||
                 nameText.equals("-entityGlint-", ignoreCase = true) ||
-                nameText.equals("-translucent-", ignoreCase = true)
+                nameText.equals("-translucent-", ignoreCase = true) ||
+                nameText.equals("-lightning-", ignoreCase = true)
             ) {
                 profilePlayer = null
             } else {
                 setSkinByUsername(nameText)
             }
-        }
-            ?: run { profilePlayer = null }
+        } ?: run { profilePlayer = null }
     }
 
     fun interactWithHandSlot(player: Player, hand: InteractionHand, slot: EquipmentSlot): InteractionResult {
@@ -463,37 +507,32 @@ open class DummyEntity(
         return InteractionResult.PASS
     }
 
-    fun interactBaseDummy(player: Player, hand: InteractionHand) : InteractionResult {
-
+    fun interactBaseDummy(player: Player, hand: InteractionHand): InteractionResult {
         if (level().isClientSide) {
-            return InteractionResult.sidedSuccess(true)
+            return InteractionResult.SUCCESS
         }
 
         if (!this.isAlive) return InteractionResult.PASS
 
         if (player.isShiftKeyDown) {
-            if (!level().isClientSide) {
-                dropDummyAsItem(player)
-            }
-            return InteractionResult.sidedSuccess(level().isClientSide)
+            dropDummyAsItem(player)
+            return InteractionResult.SUCCESS
         }
 
-        if (!level().isClientSide) {
-            if (player is ServerPlayer) {
-                player.openMenu(
-                    SimpleMenuProvider(
-                        { containerId, playerInventory, _ ->
-                            DummyMenu(containerId, playerInventory, this)
-                        },
-                        Component.empty() // Passa um componente vazio
-                    )
-                ) { buffer ->
-                    buffer.writeInt(this.id)
-                }
+        if (player is ServerPlayer) {
+            player.openMenu(
+                SimpleMenuProvider(
+                    { containerId, playerInventory, _ ->
+                        DummyMenu(containerId, playerInventory, this)
+                    },
+                    Component.empty()
+                )
+            ) { buffer ->
+                buffer.writeInt(this.id)
             }
         }
 
-        return InteractionResult.sidedSuccess(level().isClientSide)
+        return InteractionResult.SUCCESS
     }
 
     fun dropDummyAsItem(player: Player) {
@@ -517,18 +556,18 @@ open class DummyEntity(
         }
 
         if (player.hasInfiniteMaterials() && dummyStack.isEmpty && !playerStack.isEmpty) {
-            setEquipmentAndSync(slot, playerStack.copyWithCount(1)) // SUBSTITUÍDO
+            setEquipmentAndSync(slot, playerStack.copyWithCount(1))
             return true
         }
 
         if (!playerStack.isEmpty && playerStack.count > 1) {
             if (!dummyStack.isEmpty) return false
             val singleItem = playerStack.split(1)
-            setEquipmentAndSync(slot, singleItem) // SUBSTITUÍDO
+            setEquipmentAndSync(slot, singleItem)
             return true
         }
 
-        setEquipmentAndSync(slot, playerStack) // SUBSTITUÍDO
+        setEquipmentAndSync(slot, playerStack)
         player.setItemInHand(hand, dummyStack)
         return true
     }
@@ -537,7 +576,7 @@ open class DummyEntity(
     // VARIÁVEIS DE CONTROLE DE MODO
     // ========================================================================
 
-    var trainingModuleConfig : TrainingModuleConfig
+    var trainingModuleConfig: TrainingModuleConfig
         get() {
             if (this.level().isClientSide) {
                 return this.entityData.get(TRAINING_CONFIG_DATA)
@@ -556,8 +595,8 @@ open class DummyEntity(
                 }
                 return
             }
-            stack.set(ModDataComponents.TRAINING_MODULE_CONFIG,value)
-            dummyInventory.setStackInSlot(TRAINING_MODULE_SLOT,stack)
+            stack.set(ModDataComponents.TRAINING_MODULE_CONFIG, value)
+            dummyInventory.setStackInSlot(TRAINING_MODULE_SLOT, stack)
             if (!this.level().isClientSide) {
                 this.entityData.set(TRAINING_CONFIG_DATA, value)
             }
@@ -584,6 +623,8 @@ open class DummyEntity(
             TrainingModos.DPS -> {
                 when (dpsTestState) {
                     DPS_STATE_READY -> {
+                        dpsOwnerUuid = lastAttackerUuid
+                        dpsOwnerName = lastAttackerName
                         dpsTotalDamage = 0f
                         dpsHitCount = 0
                         dpsHighestHit = 0f
@@ -635,6 +676,7 @@ open class DummyEntity(
                 DPS_STATE_MEASURING -> {
                     dpsTicksRemaining = (dpsTicksRemaining - 1).coerceAtLeast(0)
                     if (dpsTicksRemaining == 0) {
+                        submitDpsRank()
                         dpsTicksRemaining = DPS_RESULT_DURATION_TICKS
                         dpsTestState = DPS_STATE_COOLDOWN
                     }
@@ -649,6 +691,33 @@ open class DummyEntity(
                     }
                 }
             }
+        }
+    }
+
+    /** `true` quando há um módulo de treino instalado (somente nesse caso os golpes valem para o ranking). */
+    fun hasTrainingModule(): Boolean =
+        dummyInventory.getStackInSlot(TRAINING_MODULE_SLOT).`is`(ModItems.TRAINING_MODULE_ITEM)
+
+    /** Envia o resultado do teste de DPS que acabou de terminar para o ranking persistente do mundo. */
+    private fun submitDpsRank() {
+        val owner = dpsOwnerUuid ?: return
+        val name = dpsOwnerName ?: return
+        dpsOwnerUuid = null
+        dpsOwnerName = null
+
+        val serverLevel = level() as? ServerLevel ?: return
+        val dps = dpsTotalDamage / (DPS_TEST_DURATION_TICKS / 20f)
+        if (dps <= 0f) return
+
+        val server = serverLevel.server
+        val data = DummyRankData.get(server)
+        if (data.recordDps(owner, name, dps)) {
+            server.playerList.getPlayer(owner)?.sendOverlayMessage(
+                Component.translatable(
+                    "message.trainingdummy.rank.new_best_dps",
+                    String.format(java.util.Locale.ROOT, "%.1f", dps)
+                )
+            )
         }
     }
 
@@ -671,69 +740,36 @@ open class DummyEntity(
         set(value) = entityData.set(OPTIONAL_PROFILE, Optional.ofNullable(value))
 
     fun setSkinByUsername(username: String?) {
-
-        val serverLevel = this.level() as? ServerLevel ?: return
-
         if (username.isNullOrBlank()) {
             profilePlayer = null
             return
         }
 
-        if (profilePlayer?.name?.map { it.equals(username, true) }?.orElse(false) ?: false) return
+        if (profilePlayer?.name()?.map { it.equals(username, true) }?.orElse(false) == true) return
 
-        profilePlayer = null
-
-        SkullBlockEntity.fetchGameProfile(username).thenAccept { profileOpt ->
-            serverLevel.server.execute {
-                if (isRemoved || level() !== serverLevel ||
-                    !customName?.string.equals(username, ignoreCase = true)
-                ) {
-                    return@execute
-                }
-                profileOpt.ifPresent { profile ->
-                    profilePlayer = ResolvableProfile(profile)
-                }
-            }
-        }
-
+        profilePlayer = ResolvableProfile.createUnresolved(username)
     }
 
     // ========================================================================
     // SALVAMENTO NO MUNDO (DISCO/WORLD NBT)
     // ========================================================================
 
-    override fun addAdditionalSaveData(compoundTag: CompoundTag) {
-        super.addAdditionalSaveData(compoundTag)
+    override fun addAdditionalSaveData(output: ValueOutput) {
+        super.addAdditionalSaveData(output)
 
-        compoundTag.remove(LEGACY_DUMMY_INVENTORY_TAG)
-        compoundTag.put(DUMMY_INVENTORY_TAG, dummyInventory.serializeNBT(level().registryAccess()))
-        compoundTag.putBoolean(DETAILED_DAMAGE_WINDOW_TAG, detailedDamageWindow)
-
-        val registryContext = registryAccess().createSerializationContext(NbtOps.INSTANCE)
-
-        compoundTag.remove(LEGACY_PROFILE_TAG)
-        compoundTag.remove(PROFILE_TAG)
-        profilePlayer?.let { profile ->
-            ResolvableProfile.CODEC.encodeStart(registryContext, profile)
-                .result()
-                .ifPresent { profileTag ->
-                    compoundTag.put(PROFILE_TAG, profileTag)
-                }
-        }
-
+        dummyInventory.serialize(output.child(DUMMY_INVENTORY_TAG))
+        output.putBoolean(DETAILED_DAMAGE_WINDOW_TAG, detailedDamageWindow)
+        output.putInt(WINDOW_SHAPE_TAG, windowShape.ordinal)
+        output.storeNullable(PROFILE_TAG, ResolvableProfile.CODEC, profilePlayer)
     }
 
-    override fun readAdditionalSaveData(compoundTag: CompoundTag) {
-        super.readAdditionalSaveData(compoundTag)
-        detailedDamageWindow = compoundTag.getBoolean(DETAILED_DAMAGE_WINDOW_TAG)
+    override fun readAdditionalSaveData(input: ValueInput) {
+        super.readAdditionalSaveData(input)
+        detailedDamageWindow = input.getBooleanOr(DETAILED_DAMAGE_WINDOW_TAG, false)
+        windowShape = WindowShapeType.byId(input.getIntOr(WINDOW_SHAPE_TAG, WindowShapeType.DEFAULT.ordinal))
 
-        val inventoryTag = when {
-            compoundTag.contains(DUMMY_INVENTORY_TAG) -> compoundTag.getCompound(DUMMY_INVENTORY_TAG)
-            compoundTag.contains(LEGACY_DUMMY_INVENTORY_TAG) -> compoundTag.getCompound(LEGACY_DUMMY_INVENTORY_TAG)
-            else -> null
-        }
-        if (inventoryTag != null) {
-            dummyInventory.deserializeNBT(level().registryAccess(), inventoryTag)
+        input.child(DUMMY_INVENTORY_TAG).ifPresent {
+            dummyInventory.deserialize(it)
             for (inventorySlot in 0 until dummyInventory.slots) {
                 equipmentSlotForInventorySlot(inventorySlot)?.let { equipmentSlot ->
                     setItemSlot(equipmentSlot, dummyInventory.getStackInSlot(inventorySlot))
@@ -742,22 +778,7 @@ open class DummyEntity(
         }
 
         syncTrainingModuleConfig(dummyInventory.getStackInSlot(TRAINING_MODULE_SLOT))
-
-        val registryContext = registryAccess().createSerializationContext(NbtOps.INSTANCE)
-        profilePlayer = null
-        val profileTag = when {
-            compoundTag.contains(PROFILE_TAG) -> compoundTag.get(PROFILE_TAG)
-            compoundTag.contains(LEGACY_PROFILE_TAG) -> compoundTag.get(LEGACY_PROFILE_TAG)
-            else -> null
-        }
-        if (profileTag != null) {
-            ResolvableProfile.CODEC.parse(registryContext, profileTag)
-                .result()
-                .ifPresent { profile ->
-                    this.profilePlayer = profile
-                }
-        }
-
+        profilePlayer = input.read(PROFILE_TAG, ResolvableProfile.CODEC).orElse(null)
     }
 
     private fun equipmentSlotForInventorySlot(inventorySlot: Int): EquipmentSlot? =
@@ -771,6 +792,22 @@ open class DummyEntity(
             else -> null
         }
 
+    override fun isCurrentlyGlowing(): Boolean {
+        if (super.isCurrentlyGlowing()) return true
+        if (this.level().isClientSide) {
+            return net.ian.trainingdummy.client.DisplayDummyClientUtil.isDummyTargetedByPlayer(this.uuid)
+        }
+        return false
+    }
+
+    override fun getTeamColor(): Int {
+        if (this.level().isClientSide) {
+            if (net.ian.trainingdummy.client.DisplayDummyClientUtil.isDummyTargetedByPlayer(this.uuid)) {
+                return 0x00E5FF
+            }
+        }
+        return super.getTeamColor()
+    }
 
     // ========================================================================
     // COMPANION OBJECT & ATRIBUTOS
@@ -798,12 +835,11 @@ open class DummyEntity(
         const val DPS_TEST_DURATION_TICKS = 100
         const val DPS_RESULT_DURATION_TICKS = 60
 
-        val DAMAGE_DATA : EntityDataAccessor<DamageData> =
+        val DAMAGE_DATA: EntityDataAccessor<DamageData> =
             SynchedEntityData.defineId(DummyEntity::class.java, ModDataSerializers.DAMAGE_DATA)
 
-        val DAMAGE_DATA_OLD : EntityDataAccessor<DamageData> =
+        val DAMAGE_DATA_OLD: EntityDataAccessor<DamageData> =
             SynchedEntityData.defineId(DummyEntity::class.java, ModDataSerializers.DAMAGE_DATA)
-
 
         val HIT_PITCH: EntityDataAccessor<Float> = SynchedEntityData.defineId(DummyEntity::class.java, EntityDataSerializers.FLOAT)
         val HIT_ROLL: EntityDataAccessor<Float> = SynchedEntityData.defineId(DummyEntity::class.java, EntityDataSerializers.FLOAT)
@@ -818,11 +854,13 @@ open class DummyEntity(
         val TRAINING_CONFIG_DATA: EntityDataAccessor<TrainingModuleConfig> =
             SynchedEntityData.defineId(DummyEntity::class.java, TrainingModuleConfig.TRAINING_MODULE_CONFIG)
 
-        val DAMAGE_ITEMSTACK : EntityDataAccessor<ItemStack> = SynchedEntityData.defineId(DummyEntity::class.java, EntityDataSerializers.ITEM_STACK)
-        val DAMAGE_ITEMSTACK_OLD : EntityDataAccessor<ItemStack> = SynchedEntityData.defineId(DummyEntity::class.java, EntityDataSerializers.ITEM_STACK)
+        val DAMAGE_ITEMSTACK: EntityDataAccessor<ItemStack> = SynchedEntityData.defineId(DummyEntity::class.java, EntityDataSerializers.ITEM_STACK)
+        val DAMAGE_ITEMSTACK_OLD: EntityDataAccessor<ItemStack> = SynchedEntityData.defineId(DummyEntity::class.java, EntityDataSerializers.ITEM_STACK)
         val DETAILED_DAMAGE_WINDOW: EntityDataAccessor<Boolean> =
             SynchedEntityData.defineId(DummyEntity::class.java, EntityDataSerializers.BOOLEAN)
 
+        val WINDOW_SHAPE: EntityDataAccessor<Int> =
+            SynchedEntityData.defineId(DummyEntity::class.java, EntityDataSerializers.INT)
 
         private const val HEAD_INVENTORY_SLOT = 0
         private const val CHEST_INVENTORY_SLOT = 1
@@ -833,10 +871,8 @@ open class DummyEntity(
         private const val OFF_HAND_INVENTORY_SLOT = 6
         private const val DUMMY_INVENTORY_TAG = "trainingdummy:DummyInventory"
         private const val DETAILED_DAMAGE_WINDOW_TAG = "trainingdummy:DetailedDamageWindow"
+        private const val WINDOW_SHAPE_TAG = "trainingdummy:WindowShape"
         private const val PROFILE_TAG = "trainingdummy:ProfilePlayer"
-        private const val LEGACY_DUMMY_INVENTORY_TAG = "DummyInventory"
-        private const val LEGACY_PROFILE_TAG = "ProfilePlayer"
-
 
         fun createAttributes(): AttributeSupplier.Builder {
             return createMobAttributes()

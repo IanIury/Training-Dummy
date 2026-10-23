@@ -1,32 +1,26 @@
 package net.ian.trainingdummy.client
 
-import net.ian.trainingdummy.TrainingDummy.LOGGER
-import net.ian.trainingdummy.item.ModItems
-import net.ian.trainingdummy.item.renderer.DummyItemRenderer
-import net.minecraft.client.renderer.BlockEntityWithoutLevelRenderer
+import net.ian.trainingdummy.TrainingDummy
+import net.ian.trainingdummy.client.renderer.DummySpecialRenderer
+import net.minecraft.resources.Identifier
 import net.neoforged.fml.event.lifecycle.FMLClientSetupEvent
-import net.neoforged.neoforge.client.extensions.common.IClientItemExtensions
+import net.neoforged.neoforge.client.event.RegisterSpecialModelRendererEvent
 import net.neoforged.neoforge.client.extensions.common.RegisterClientExtensionsEvent
 import org.apache.logging.log4j.Level
 
-
 object ClientSetup {
 
-
     fun onClientSetup(event: FMLClientSetupEvent) {
-        LOGGER.log(Level.INFO, "Initializing client...")
+        TrainingDummy.LOGGER.log(Level.INFO, "Initializing client...")
     }
 
     fun registerClientExtensions(event: RegisterClientExtensionsEvent) {
-        // Registra o BEWLR no seu DummyItem
-        event.registerItem(object : IClientItemExtensions {
-            private val renderer by lazy { DummyItemRenderer() }
-
-            override fun getCustomRenderer(): BlockEntityWithoutLevelRenderer {
-                return renderer
-            }
-        }, ModItems.DUMMY_ITEM_SPAWN)
     }
 
-
+    fun registerSpecialModelRenderers(event: RegisterSpecialModelRendererEvent) {
+        event.register(
+            Identifier.fromNamespaceAndPath(TrainingDummy.ID, "dummy"),
+            DummySpecialRenderer.Unbaked.MAP_CODEC
+        )
+    }
 }

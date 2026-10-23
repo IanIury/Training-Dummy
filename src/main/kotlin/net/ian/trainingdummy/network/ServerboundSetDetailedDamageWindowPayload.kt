@@ -4,7 +4,7 @@ import net.ian.trainingdummy.screen.custom.DummyMenu
 import net.minecraft.network.FriendlyByteBuf
 import net.minecraft.network.codec.StreamCodec
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload
-import net.minecraft.resources.ResourceLocation
+import net.minecraft.resources.Identifier
 import net.neoforged.neoforge.network.handling.IPayloadContext
 
 class ServerboundSetDetailedDamageWindowPayload(
@@ -13,7 +13,7 @@ class ServerboundSetDetailedDamageWindowPayload(
 
     companion object {
         val TYPE = CustomPacketPayload.Type<ServerboundSetDetailedDamageWindowPayload>(
-            ResourceLocation.fromNamespaceAndPath("trainingdummy", "set_detailed_damage_window")
+            Identifier.fromNamespaceAndPath("trainingdummy", "set_detailed_damage_window")
         )
 
         val STREAM_CODEC: StreamCodec<FriendlyByteBuf, ServerboundSetDetailedDamageWindowPayload> =

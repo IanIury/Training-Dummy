@@ -1,5 +1,7 @@
 package net.ian.trainingdummy.entity
 
+import net.minecraft.resources.ResourceKey
+
 import net.ian.trainingdummy.TrainingDummy
 import net.minecraft.core.registries.Registries
 import net.minecraft.world.entity.EntityType
@@ -17,11 +19,11 @@ object ModEntities {
         DeferredRegister.create(Registries.ENTITY_TYPE, TrainingDummy.ID)
 
     val DUMMY: DeferredHolder<EntityType<*>, EntityType<DummyEntity>> =
-        ENTITIES.register("training_dummy") { ->
+        ENTITIES.register("training_dummy") { key ->
             EntityType.Builder.of(::DummyEntity, MobCategory.MISC)
                 .sized(0.6F, 2.1F)
                 //.clientTrackingRange(10)
-                .build("training_dummy")
+                .build(ResourceKey.create(Registries.ENTITY_TYPE, key))
         }
 
     fun register(bus: IEventBus) {

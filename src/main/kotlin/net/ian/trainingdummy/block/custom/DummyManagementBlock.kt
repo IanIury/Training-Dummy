@@ -4,6 +4,7 @@ import com.mojang.serialization.MapCodec
 import net.ian.trainingdummy.block.entityblock.DummyManagementBlockEntity
 import net.ian.trainingdummy.screen.custom.DummyManagementMenu
 import net.minecraft.core.BlockPos
+import net.minecraft.core.Direction
 import net.minecraft.network.chat.Component
 import net.minecraft.server.level.ServerPlayer
 import net.minecraft.world.InteractionResult
@@ -21,21 +22,21 @@ import net.minecraft.world.level.block.state.BlockBehaviour.Properties
 import net.minecraft.world.level.block.state.BlockState
 import net.minecraft.world.phys.BlockHitResult
 
-class DummyManagementBlock (properties: Properties) : BaseEntityBlock(properties) {
-
+class DummyManagementBlock(properties: Properties) : BaseEntityBlock(properties) {
 
     companion object {
-        val CODEC : MapCodec<DummyManagementBlock> = simpleCodec(::DummyManagementBlock)
+        val CODEC: MapCodec<DummyManagementBlock> = simpleCodec(::DummyManagementBlock)
     }
-    override fun codec(): MapCodec<out BaseEntityBlock?> {
-       return CODEC
+
+    override fun codec(): MapCodec<out BaseEntityBlock> {
+        return CODEC
     }
 
     override fun newBlockEntity(
         p0: BlockPos,
         p1: BlockState
     ): BlockEntity {
-        return DummyManagementBlockEntity(p0,p1)
+        return DummyManagementBlockEntity(p0, p1)
     }
 
     override fun getRenderShape(state: BlockState): RenderShape = RenderShape.MODEL
@@ -58,17 +59,17 @@ class DummyManagementBlock (properties: Properties) : BaseEntityBlock(properties
             )
             player.openMenu(provider) { buffer -> buffer.writeBlockPos(pos) }
         }
-        return InteractionResult.sidedSuccess(level.isClientSide)
+        return InteractionResult.SUCCESS
     }
 
     override fun hasAnalogOutputSignal(state: BlockState): Boolean = true
 
     override fun isSignalSource(state: BlockState): Boolean = true
 
-    override fun getAnalogOutputSignal(state: BlockState, level: Level, pos: BlockPos): Int =
+    override fun getAnalogOutputSignal(state: BlockState, level: Level, pos: BlockPos, direction: Direction): Int =
         (level.getBlockEntity(pos) as? DummyManagementBlockEntity)?.redstoneSignal() ?: 0
 
-    override fun getSignal(state: BlockState, level: BlockGetter, pos: BlockPos, direction: net.minecraft.core.Direction): Int =
+    override fun getSignal(state: BlockState, level: BlockGetter, pos: BlockPos, direction: Direction): Int =
         (level.getBlockEntity(pos) as? DummyManagementBlockEntity)?.redstoneSignal() ?: 0
 
     override fun <T : BlockEntity> getTicker(
@@ -81,5 +82,4 @@ class DummyManagementBlock (properties: Properties) : BaseEntityBlock(properties
             (blockEntity as? DummyManagementBlockEntity)?.tickServer()
         }
     }
-
 }

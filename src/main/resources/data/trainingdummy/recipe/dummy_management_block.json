@@ -6,15 +6,9 @@
     "S#S"
   ],
   "key": {
-    "S": {
-      "tag": "minecraft:stone_crafting_materials"
-    },
-    "#": {
-      "item": "minecraft:observer"
-    },
-    "T": {
-      "item": "trainingdummy:training_module_item"
-    }
+    "S": "#minecraft:stone_crafting_materials",
+    "#": "minecraft:observer",
+    "T": "trainingdummy:training_module_item"
   },
   "result": {
     "id": "trainingdummy:dummy_management_block"

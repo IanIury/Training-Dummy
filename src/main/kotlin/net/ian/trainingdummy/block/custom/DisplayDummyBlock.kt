@@ -4,20 +4,25 @@ import com.mojang.serialization.MapCodec
 import net.ian.trainingdummy.block.entityblock.DisplayDummyBlockEntity
 import net.minecraft.core.BlockPos
 import net.minecraft.core.Direction
+import net.minecraft.core.component.DataComponents
 import net.minecraft.world.entity.item.ItemEntity
 import net.minecraft.world.entity.player.Player
 import net.minecraft.world.item.ItemStack
+import net.minecraft.world.item.component.CustomData
 import net.minecraft.world.item.context.BlockPlaceContext
 import net.minecraft.world.level.BlockGetter
 import net.minecraft.world.level.Level
 import net.minecraft.world.level.LevelAccessor
-import net.minecraft.world.level.block.*
+import net.minecraft.world.level.block.BaseEntityBlock
+import net.minecraft.world.level.block.Block
+import net.minecraft.world.level.block.Mirror
+import net.minecraft.world.level.block.RenderShape
+import net.minecraft.world.level.block.Rotation
 import net.minecraft.world.level.block.entity.BlockEntity
 import net.minecraft.world.level.block.state.BlockState
 import net.minecraft.world.level.block.state.StateDefinition
 import net.minecraft.world.level.block.state.properties.AttachFace
 import net.minecraft.world.level.block.state.properties.BlockStateProperties
-import net.minecraft.world.level.block.state.properties.DirectionProperty
 import net.minecraft.world.level.block.state.properties.EnumProperty
 import net.minecraft.world.phys.Vec3
 import net.minecraft.world.phys.shapes.CollisionContext
@@ -37,7 +42,7 @@ class DisplayDummyBlock(properties: Properties) : BaseEntityBlock(properties) {
     companion object {
         val CODEC: MapCodec<DisplayDummyBlock> = simpleCodec(::DisplayDummyBlock)
 
-        val FACING: DirectionProperty = HorizontalDirectionalBlock.FACING
+        val FACING: EnumProperty<Direction> = BlockStateProperties.HORIZONTAL_FACING
         val FACE: EnumProperty<AttachFace> = BlockStateProperties.ATTACH_FACE
 
         // VoxelShape base apontando para o Norte no Chão, alinhado aos elementos do modelo.
@@ -52,22 +57,18 @@ class DisplayDummyBlock(properties: Properties) : BaseEntityBlock(properties) {
             TOP_SHAPE
         )
 
-
-
         fun getShapeForState(state: BlockState): VoxelShape {
             val facing = state.getValue(FACING)
             val face = state.getValue(FACE)
 
             var shape = SHAPE_BASE
 
-            // Rotação da superfície (Teto ou Parede)
             shape = when (face) {
                 AttachFace.CEILING -> rotateVoxel(shape, Direction.DOWN)
                 AttachFace.WALL -> rotateVoxel(shape, Direction.NORTH)
                 AttachFace.FLOOR -> shape
             }
 
-            // Rotação horizontal (Norte, Sul, Leste, Oeste)
             val steps = when (facing) {
                 Direction.SOUTH -> 2
                 Direction.WEST -> 3
@@ -130,7 +131,7 @@ class DisplayDummyBlock(properties: Properties) : BaseEntityBlock(properties) {
             shape.forAllBoxes { minX, minY, minZ, maxX, maxY, maxZ ->
                 rotated.add(Block.box((1.0 - maxZ) * 16, minY * 16, minX * 16, (1.0 - minZ) * 16, maxY * 16, maxX * 16))
             }
-            return rotated.reduceOrNull { a, b -> Shapes.or(a, b) } ?: shape
+            return rotated.reduceOrNull { a: VoxelShape, b: VoxelShape -> Shapes.or(a, b) } ?: shape
         }
 
         private fun rotateVoxel(shape: VoxelShape, target: Direction): VoxelShape {
@@ -142,7 +143,7 @@ class DisplayDummyBlock(properties: Properties) : BaseEntityBlock(properties) {
                     else -> rotated.add(shape)
                 }
             }
-            return rotated.reduceOrNull { a, b -> Shapes.or(a, b) } ?: shape
+            return rotated.reduceOrNull { a: VoxelShape, b: VoxelShape -> Shapes.or(a, b) } ?: shape
         }
     }
 
@@ -174,12 +175,16 @@ class DisplayDummyBlock(properties: Properties) : BaseEntityBlock(properties) {
         return getShapeForState(state)
     }
 
+    override fun rotate(state: BlockState, rotation: Rotation): BlockState {
+        return state.setValue(FACING, rotation.rotate(state.getValue(FACING)))
+    }
+
     override fun rotate(state: BlockState, level: LevelAccessor, pos: BlockPos, direction: Rotation): BlockState {
-        return state.setValue(FACING, direction.rotate(state.getValue(FACING)))
+        return rotate(state, direction)
     }
 
     override fun mirror(state: BlockState, mirror: Mirror): BlockState {
-        return state.rotate(mirror.getRotation(state.getValue(FACING)))
+        return rotate(state, mirror.getRotation(state.getValue(FACING)))
     }
 
     override fun codec(): MapCodec<out BaseEntityBlock> {
@@ -198,8 +203,18 @@ class DisplayDummyBlock(properties: Properties) : BaseEntityBlock(properties) {
         val blockEntity = level.getBlockEntity(pos) as? DisplayDummyBlockEntity
         if (!level.isClientSide && blockEntity != null && !player.isCreative) {
             val stack = ItemStack(this)
-
-            blockEntity.saveToItem(stack, level.registryAccess())
+            stack.applyComponents(blockEntity.collectComponents())
+            blockEntity.target_entity_uuid?.let { uuid ->
+                CustomData.update(DataComponents.CUSTOM_DATA, stack) { tag ->
+                    tag.putString("dummy_uuid", uuid.toString())
+                    blockEntity.dummy_name?.let { tag.putString("dummy_name", it) }
+                    blockEntity.dummy_x?.let { tag.putDouble("dummy_x", it) }
+                    blockEntity.dummy_y?.let { tag.putDouble("dummy_y", it) }
+                    blockEntity.dummy_z?.let { tag.putDouble("dummy_z", it) }
+                    blockEntity.dummy_dim?.let { tag.putString("dummy_dimension", it) }
+                    blockEntity.dummy_mode?.let { tag.putString("dummy_mode", it) }
+                }
+            }
 
             val itemEntity = ItemEntity(
                 level,

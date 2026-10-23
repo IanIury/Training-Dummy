@@ -6,7 +6,7 @@ import net.ian.trainingdummy.screen.custom.DummyMenu
 import net.minecraft.network.FriendlyByteBuf
 import net.minecraft.network.codec.StreamCodec
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload
-import net.minecraft.resources.ResourceLocation
+import net.minecraft.resources.Identifier
 import net.neoforged.neoforge.network.handling.IPayloadContext
 
 class ServerboundChangeModePayload(
@@ -15,7 +15,7 @@ class ServerboundChangeModePayload(
 
     companion object {
         val TYPE = CustomPacketPayload.Type<ServerboundChangeModePayload>(
-            ResourceLocation.fromNamespaceAndPath("trainingdummy", "change_mode")
+            Identifier.fromNamespaceAndPath("trainingdummy", "change_mode")
         )
 
         val STREAM_CODEC: StreamCodec<FriendlyByteBuf, ServerboundChangeModePayload> = CustomPacketPayload.codec(

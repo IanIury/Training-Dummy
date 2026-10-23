@@ -3,13 +3,16 @@ package net.ian.trainingdummy.screen.custom
 import net.ian.trainingdummy.block.entityblock.DummyManagementAction
 import net.ian.trainingdummy.block.entityblock.DummyManagementMode
 import net.ian.trainingdummy.network.ServerboundDummyManagementActionPayload
-import net.minecraft.client.gui.GuiGraphics
+import net.minecraft.client.Minecraft
+import net.minecraft.client.gui.GuiGraphicsExtractor
 import net.minecraft.client.gui.components.Button
 import net.minecraft.client.gui.components.EditBox
+import net.minecraft.client.gui.components.Tooltip
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen
+import net.minecraft.client.input.KeyEvent
 import net.minecraft.network.chat.Component
 import net.minecraft.world.entity.player.Inventory
-import net.neoforged.neoforge.network.PacketDistributor
+import net.neoforged.neoforge.client.network.ClientPacketDistributor
 import org.lwjgl.glfw.GLFW
 import java.util.Locale
 import kotlin.math.roundToInt
@@ -18,7 +21,7 @@ class DummyManagementScreen(
     menu: DummyManagementMenu,
     inventory: Inventory,
     title: Component
-) : AbstractContainerScreen<DummyManagementMenu>(menu, inventory, title) {
+) : AbstractContainerScreen<DummyManagementMenu>(menu, inventory, title, 286, 220) {
     private var modeButton: Button? = null
     private var inversionButton: Button? = null
     private val toggleButtons = mutableListOf<Pair<Button, Int>>()
@@ -26,8 +29,6 @@ class DummyManagementScreen(
     private var displayedMode = -1
 
     init {
-        imageWidth = 286
-        imageHeight = 220
         inventoryLabelY = imageHeight + 20
     }
 
@@ -61,7 +62,6 @@ class DummyManagementScreen(
                     Component.translatable(control.labelKey)
                 )
                 field.setMaxLength(10)
-                field.setFilter { it.matches(NUMERIC_INPUT) }
                 field.value = formatValue(control.dataIndex, control.decimalPlaces)
                 valueFields += field to control
                 addRenderableWidget(field)
@@ -83,8 +83,8 @@ class DummyManagementScreen(
                 OnPress { send(DummyManagementAction.TOGGLE_OUTPUT_INVERSION) },
                 CreateNarration { inversionLabel().copy() }
             ) {
-                override fun renderWidget(
-                    guiGraphics: GuiGraphics,
+                override fun extractContents(
+                    extractor: GuiGraphicsExtractor,
                     mouseX: Int,
                     mouseY: Int,
                     partialTick: Float
@@ -100,12 +100,12 @@ class DummyManagementScreen(
                     val border = if (inverted) 0xFF75E6B4.toInt() else 0xFF66849A.toInt()
                     val text = if (inverted) 0xFFFFFFFF.toInt() else 0xFFC9D8E3.toInt()
 
-                    guiGraphics.fill(x, y, x + width, y + height, background)
-                    guiGraphics.renderOutline(x, y, width, height, border)
-                    guiGraphics.drawCenteredString(font, message, x + width / 2, y + 4, text)
+                    extractor.fill(x, y, x + width, y + height, background)
+                    extractor.outline(x, y, width, height, border)
+                    extractor.centeredText(font, message, x + width / 2, y + 4, text)
                 }
             }.also {
-                it.tooltip = net.minecraft.client.gui.components.Tooltip.create(inversionLabel())
+                it.setTooltip(Tooltip.create(inversionLabel()))
             }
         )
     }
@@ -115,21 +115,21 @@ class DummyManagementScreen(
         if (displayedMode != menu.value(0)) rebuildWidgets()
     }
 
-    override fun keyPressed(keyCode: Int, scanCode: Int, modifiers: Int): Boolean {
-        if (keyCode == GLFW.GLFW_KEY_ENTER || keyCode == GLFW.GLFW_KEY_KP_ENTER) {
+    override fun keyPressed(event: KeyEvent): Boolean {
+        if (event.key() == GLFW.GLFW_KEY_ENTER || event.key() == GLFW.GLFW_KEY_KP_ENTER) {
             valueFields.firstOrNull { (field, _) -> field.isFocused }?.let { (field, control) ->
                 submitValue(field, control)
                 return true
             }
         }
-        return super.keyPressed(keyCode, scanCode, modifiers)
+        return super.keyPressed(event)
     }
 
-    override fun renderBg(guiGraphics: GuiGraphics, partialTick: Float, mouseX: Int, mouseY: Int) {
+    override fun extractBackground(guiGraphics: GuiGraphicsExtractor, mouseX: Int, mouseY: Int, partialTick: Float) {
         guiGraphics.fill(leftPos, topPos, leftPos + imageWidth, topPos + imageHeight, 0xF0101724.toInt())
         guiGraphics.fill(leftPos + 1, topPos + 1, leftPos + imageWidth - 1, topPos + 20, 0xFF1C2A3C.toInt())
-        guiGraphics.renderOutline(leftPos, topPos, imageWidth, imageHeight, 0xFF54C8E8.toInt())
-        guiGraphics.drawString(
+        guiGraphics.outline(leftPos, topPos, imageWidth, imageHeight, 0xFF54C8E8.toInt())
+        guiGraphics.text(
             font,
             title,
             leftPos + 10,
@@ -139,7 +139,7 @@ class DummyManagementScreen(
 
         controlsFor(currentMode()).forEachIndexed { index, control ->
             val y = topPos + 58 + index * ROW_HEIGHT
-            guiGraphics.drawString(
+            guiGraphics.text(
                 font,
                 Component.translatable(control.labelKey),
                 leftPos + 12,
@@ -147,7 +147,7 @@ class DummyManagementScreen(
                 0xFFE4EDF5.toInt()
             )
         }
-        guiGraphics.drawString(
+        guiGraphics.text(
             font,
             Component.translatable("gui.trainingdummy.redstone_output", menu.value(10)),
             leftPos + 12,
@@ -155,7 +155,7 @@ class DummyManagementScreen(
             0xFF8BE9A8.toInt()
         )
         when (currentMode()) {
-            DummyManagementMode.DPS -> guiGraphics.drawString(
+            DummyManagementMode.DPS -> guiGraphics.text(
                 font,
                 Component.translatable(
                     "gui.trainingdummy.dps_status",
@@ -169,14 +169,14 @@ class DummyManagementScreen(
                 topPos + imageHeight - 40,
                 0xFFB9C9DC.toInt()
             )
-            DummyManagementMode.DAMAGE_TARGET -> guiGraphics.drawString(
+            DummyManagementMode.DAMAGE_TARGET -> guiGraphics.text(
                 font,
                 Component.translatable("gui.trainingdummy.damage_tolerance"),
                 leftPos + 12,
                 topPos + imageHeight - 40,
                 0xFFB9C9DC.toInt()
             )
-            else -> guiGraphics.drawString(
+            else -> guiGraphics.text(
                 font,
                 Component.translatable(
                     "gui.trainingdummy.virtual_health",
@@ -188,7 +188,7 @@ class DummyManagementScreen(
                 0xFFB9C9DC.toInt()
             )
         }
-        guiGraphics.drawString(
+        guiGraphics.text(
             font,
             if (menu.value(15) == 1) {
                 Component.translatable("gui.trainingdummy.dummy_connected")
@@ -204,19 +204,17 @@ class DummyManagementScreen(
         )
     }
 
-    override fun render(guiGraphics: GuiGraphics, mouseX: Int, mouseY: Int, partialTick: Float) {
+    override fun extractRenderState(guiGraphics: GuiGraphicsExtractor, mouseX: Int, mouseY: Int, partialTick: Float) {
         modeButton?.message = modeLabel()
-        inversionButton?.tooltip = net.minecraft.client.gui.components.Tooltip.create(inversionLabel())
+        inversionButton?.setTooltip(Tooltip.create(inversionLabel()))
         toggleButtons.forEach { (button, index) -> button.message = toggleLabel(index) }
         valueFields.forEach { (field, control) ->
             if (!field.isFocused) field.value = formatValue(control.dataIndex, control.decimalPlaces)
         }
-        renderBackground(guiGraphics, mouseX, mouseY, partialTick)
-        super.render(guiGraphics, mouseX, mouseY, partialTick)
-        renderTooltip(guiGraphics, mouseX, mouseY)
+        super.extractRenderState(guiGraphics, mouseX, mouseY, partialTick)
     }
 
-    override fun renderLabels(guiGraphics: GuiGraphics, mouseX: Int, mouseY: Int) = Unit
+    override fun extractLabels(guiGraphics: GuiGraphicsExtractor, mouseX: Int, mouseY: Int) = Unit
 
     private fun currentMode(): DummyManagementMode =
         DummyManagementMode.entries.getOrElse(menu.value(0)) { DummyManagementMode.HEALTH }
@@ -278,14 +276,14 @@ class DummyManagementScreen(
         if (!parsed.isFinite() || parsed < 0.0) return
         val scale = if (control.decimalPlaces == 1) 10.0 else 1.0
         val scaled = (parsed * scale).roundToInt()
-        PacketDistributor.sendToServer(
+        ClientPacketDistributor.sendToServer(
             ServerboundDummyManagementActionPayload(menu.blockPos, DummyManagementAction.SET_VALUE, control.dataIndex, scaled)
         )
         field.isFocused = false
     }
 
     private fun send(action: DummyManagementAction) {
-        PacketDistributor.sendToServer(ServerboundDummyManagementActionPayload(menu.blockPos, action))
+        ClientPacketDistributor.sendToServer(ServerboundDummyManagementActionPayload(menu.blockPos, action))
     }
 
     private data class Control(
@@ -298,6 +296,5 @@ class DummyManagementScreen(
 
     companion object {
         private const val ROW_HEIGHT = 25
-        private val NUMERIC_INPUT = Regex("[0-9]*([.,][0-9]*)?")
     }
 }

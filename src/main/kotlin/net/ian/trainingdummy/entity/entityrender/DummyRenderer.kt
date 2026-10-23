@@ -1,48 +1,40 @@
 package net.ian.trainingdummy.entity.entityrender
 
-
 import com.mojang.blaze3d.vertex.PoseStack
+import com.mojang.blaze3d.vertex.VertexConsumer
 import dev.ian.worldpanel.FloatingWindow
 import dev.ian.worldpanel.WindowAlignment
 import dev.ian.worldpanel.WindowColor
 import dev.ian.worldpanel.WindowElement
-import dev.ian.worldpanel.shape.PanelShape
-import dev.ian.worldpanel.shape.TextureFitMode
-import dev.ian.worldpanel.region.RegionMap
-import dev.ian.worldpanel.layout.ContentLayout
-import dev.ian.worldpanel.depth.DepthStyle
-import dev.ian.worldpanel.shape.RectF
-
+import dev.ian.worldpanel.shape.Volume3DConfig
 import net.ian.trainingdummy.TrainingDummy
-import net.ian.trainingdummy.client.layer.DummyCustomHeadLayer
-import net.ian.trainingdummy.client.layer.DummyElytraLayer
-import net.ian.trainingdummy.client.layer.DummyFaceLayer
-import net.ian.trainingdummy.client.layer.DummyHumanoidArmorLayer
-import net.ian.trainingdummy.client.layer.DummyItemInHandLayer
-
+import net.ian.trainingdummy.client.gui.WindowShapes
 import net.ian.trainingdummy.client.model.DummyModel
-
 import net.ian.trainingdummy.entity.DummyEntity
-import net.ian.trainingdummy.event.utils.DamageData
 import net.ian.trainingdummy.init.enums.TrainingModos
+import net.ian.trainingdummy.init.enums.WindowShapeType
+import net.ian.trainingdummy.init.utils.ClientSkinUtils
+import net.ian.trainingdummy.screen.custom.DummyScreen
 import net.minecraft.client.model.HumanoidModel
 import net.minecraft.client.model.geom.ModelLayers
-import net.minecraft.client.renderer.MultiBufferSource
+import net.minecraft.client.model.geom.ModelPart
+import net.minecraft.client.renderer.SubmitNodeCollector
+import net.minecraft.client.renderer.entity.ArmorModelSet
 import net.minecraft.client.renderer.entity.EntityRendererProvider
 import net.minecraft.client.renderer.entity.HumanoidMobRenderer
-import net.minecraft.client.renderer.entity.ItemRenderer
+import net.minecraft.client.renderer.entity.LivingEntityRenderer
+import net.minecraft.client.renderer.entity.RenderLayerParent
+import net.minecraft.client.renderer.entity.layers.EquipmentLayerRenderer
+import net.minecraft.client.renderer.entity.layers.HumanoidArmorLayer
 import net.minecraft.client.renderer.entity.layers.RenderLayer
-import net.minecraft.client.renderer.entity.layers.CustomHeadLayer
-import net.minecraft.client.renderer.entity.layers.ElytraLayer
-import net.minecraft.client.renderer.entity.layers.ItemInHandLayer
-import net.minecraft.core.Direction
+import net.minecraft.client.renderer.entity.layers.WingsLayer
+import net.minecraft.client.renderer.rendertype.RenderTypes
+import net.minecraft.client.renderer.state.level.CameraRenderState
 import net.minecraft.core.component.DataComponents
 import net.minecraft.network.chat.Component
-import net.minecraft.ChatFormatting
-import net.minecraft.client.renderer.RenderType
-import net.minecraft.client.renderer.entity.LivingEntityRenderer
-import net.minecraft.resources.ResourceLocation
+import net.minecraft.resources.Identifier
 import net.minecraft.util.Mth
+import net.minecraft.world.entity.EquipmentSlot
 import net.minecraft.world.item.ItemStack
 import net.minecraft.world.item.Items
 import net.minecraft.world.item.alchemy.PotionContents
@@ -60,158 +52,601 @@ data class DummyWindowProjection(
     val rightZ: Double
 )
 
-class DummyRenderer(context: EntityRendererProvider.Context) : HumanoidMobRenderer<DummyEntity, DummyModel>(
+class DummyRenderer(context: EntityRendererProvider.Context) : HumanoidMobRenderer<DummyEntity, DummyRenderState, DummyModel>(
     context,
     DummyModel(context.bakeLayer(DummyModel.LAYER_LOCATION)),
     0.5f
 ) {
 
     init {
+        this.layers.removeIf { it is WingsLayer<*, *> }
 
-        this.layers.removeIf { it is CustomHeadLayer<*, *> }
-        this.layers.removeIf { it is ItemInHandLayer<*, *> }
-        this.layers.removeIf { it is ElytraLayer<*, *> }
+        val armorLayers = ModelLayers.PLAYER_ARMOR
+        val armorModelSet = ArmorModelSet(
+            DummyArmorModel(context.bakeLayer(armorLayers.head()), EquipmentSlot.HEAD),
+            DummyArmorModel(context.bakeLayer(armorLayers.chest()), EquipmentSlot.CHEST),
+            DummyArmorModel(context.bakeLayer(armorLayers.legs()), EquipmentSlot.LEGS),
+            DummyArmorModel(context.bakeLayer(armorLayers.feet()), EquipmentSlot.FEET)
+        )
 
+        this.addLayer(BasePlateLayer())
+        this.addLayer(DummyHumanoidArmorLayer(this, armorModelSet, context.equipmentRenderer))
+        this.addLayer(DummyWingsLayer(this, context.modelSet, context.equipmentRenderer))
+        this.addLayer(DummyFaceLayer())
         this.addLayer(JebColorLayer())
         this.addLayer(NamedRenderEffectLayer())
-
-        val innerArmor = HumanoidModel<DummyEntity>(context.bakeLayer(ModelLayers.PLAYER_INNER_ARMOR))
-        val outerArmor = HumanoidModel<DummyEntity>(context.bakeLayer(ModelLayers.PLAYER_OUTER_ARMOR))
-
-        this.addLayer(DummyHumanoidArmorLayer(this, innerArmor, outerArmor, context.modelManager))
-        this.addLayer(DummyItemInHandLayer(this, context.itemInHandRenderer))
-        this.addLayer(DummyCustomHeadLayer(this, context.modelSet, context.itemInHandRenderer))
-        this.addLayer(DummyElytraLayer(this, context.modelSet))
-        this.addLayer(DummyFaceLayer(this, context.modelSet))
-
-        //this.addLayer(DummyOutlineLayer(this))
+        this.addLayer(HandHologramLayer())
     }
 
-    private inner class JebColorLayer : RenderLayer<DummyEntity, DummyModel>(this@DummyRenderer) {
-        override fun render(
-            poseStack: PoseStack,
-            buffer: MultiBufferSource,
-            packedLight: Int,
-            entity: DummyEntity,
-            limbSwing: Float,
-            limbSwingAmount: Float,
-            partialTick: Float,
-            ageInTicks: Float,
-            netHeadYaw: Float,
-            headPitch: Float
-        ) {
-            if (entity.customName?.string != "jeb_") return
+    private class DummyArmorModel(
+        root: ModelPart,
+        private val slot: EquipmentSlot
+    ) : HumanoidModel<DummyRenderState>(root) {
 
-            val cycleProgress = (entity.tickCount + partialTick) / COLOR_CYCLE_TICKS
+        override fun setupAnim(state: DummyRenderState) {
+            head.visible = false
+            hat.visible = false
+            body.visible = false
+            rightArm.visible = false
+            leftArm.visible = false
+            rightLeg.visible = false
+            leftLeg.visible = false
+
+            head.setPos(0.0f, -25.75f, 0.0f)
+            head.setRotation(0.0f, 0.0f, 0.0f)
+
+            hat.setPos(0.0f, 0.0f, 0.0f)
+            hat.setRotation(0.0f, 0.0f, 0.0f)
+
+            body.setPos(0.0f, -24.75f, 0.0f)
+            body.setRotation(0.0f, 0.0f, 0.0f)
+
+            rightArm.setPos(-5.0f, -23.75f, 0.0f)
+            rightArm.setRotation(0.0f, 0.0f, 0.0f)
+
+            leftArm.setPos(5.0f, -23.75f, 0.0f)
+            leftArm.setRotation(0.0f, 0.0f, 0.0f)
+
+            rightLeg.setPos(-0.1f, -12.75f, 0.0f)
+            rightLeg.setRotation(0.0f, 0.0f, 0.0f)
+
+            leftLeg.setPos(-0.1f, -12.75f, 0.0f)
+            leftLeg.setRotation(0.0f, 0.0f, 0.0f)
+
+            when (slot) {
+                EquipmentSlot.HEAD -> {
+                    head.visible = true
+                    hat.visible = true
+                }
+                EquipmentSlot.CHEST -> {
+                    body.visible = true
+                    rightArm.visible = true
+                    leftArm.visible = true
+                    rightArm.xScale = 1.01f
+                    rightArm.yScale = 1.01f
+                    rightArm.zScale = 1.01f
+                    leftArm.xScale = 1.01f
+                    leftArm.yScale = 1.01f
+                    leftArm.zScale = 1.01f
+                }
+                EquipmentSlot.LEGS, EquipmentSlot.FEET -> {
+                    rightLeg.visible = true
+                    leftLeg.visible = false
+                }
+                else -> {}
+            }
+        }
+    }
+
+    private inner class DummyHumanoidArmorLayer(
+        renderer: RenderLayerParent<DummyRenderState, DummyModel>,
+        armorModelSet: ArmorModelSet<DummyArmorModel>,
+        equipmentRenderer: EquipmentLayerRenderer
+    ) : HumanoidArmorLayer<DummyRenderState, DummyModel, DummyArmorModel>(renderer, armorModelSet, equipmentRenderer) {
+
+        override fun submit(
+            poseStack: PoseStack,
+            collector: SubmitNodeCollector,
+            packedLight: Int,
+            state: DummyRenderState,
+            yRot: Float,
+            xRot: Float
+        ) {
+            parentModel.setupAnim(state)
+            poseStack.pushPose()
+            parentModel.wobble_node.translateAndRotate(poseStack)
+            super.submit(poseStack, collector, packedLight, state, yRot, xRot)
+            poseStack.popPose()
+        }
+    }
+
+    private inner class DummyWingsLayer(
+        renderer: RenderLayerParent<DummyRenderState, DummyModel>,
+        modelSet: net.minecraft.client.model.geom.EntityModelSet,
+        equipmentRenderer: EquipmentLayerRenderer
+    ) : WingsLayer<DummyRenderState, DummyModel>(renderer, modelSet, equipmentRenderer) {
+
+        override fun submit(
+            poseStack: PoseStack,
+            collector: SubmitNodeCollector,
+            packedLight: Int,
+            state: DummyRenderState,
+            yRot: Float,
+            xRot: Float
+        ) {
+            parentModel.setupAnim(state)
+            poseStack.pushPose()
+            parentModel.wobble_node.translateAndRotate(poseStack)
+            parentModel.body.translateAndRotate(poseStack)
+            super.submit(poseStack, collector, packedLight, state, yRot, xRot)
+            poseStack.popPose()
+        }
+    }
+
+    private inner class BasePlateLayer : RenderLayer<DummyRenderState, DummyModel>(this@DummyRenderer) {
+        override fun submit(
+            poseStack: PoseStack,
+            collector: SubmitNodeCollector,
+            packedLight: Int,
+            state: DummyRenderState,
+            yRot: Float,
+            xRot: Float
+        ) {
+            val baseRenderType = this@DummyRenderer.model.renderType(getTextureLocation(state))
+            collector.submitModelPart(
+                this@DummyRenderer.model.base_plate,
+                poseStack,
+                baseRenderType,
+                packedLight,
+                LivingEntityRenderer.getOverlayCoords(state, 0f),
+                null
+            )
+        }
+    }
+
+    private inner class DummyFaceLayer : RenderLayer<DummyRenderState, DummyModel>(this@DummyRenderer) {
+        override fun submit(
+            poseStack: PoseStack,
+            collector: SubmitNodeCollector,
+            packedLight: Int,
+            state: DummyRenderState,
+            yRot: Float,
+            xRot: Float
+        ) {
+            val skinLocation = state.skinTexture ?: return
+            if (!state.headItem.isEmpty) return
+
+            val overlay = LivingEntityRenderer.getOverlayCoords(state, 0f)
+            val renderType = RenderTypes.entityTranslucent(skinLocation)
+
+            parentModel.setupAnim(state)
+            poseStack.pushPose()
+            parentModel.wobble_node.translateAndRotate(poseStack)
+            parentModel.head.translateAndRotate(poseStack)
+
+            collector.submitCustomGeometry(poseStack, renderType) { pose, consumer ->
+                val minX = -4.0f / 16.0f
+                val maxX = 4.0f / 16.0f
+                val minY = -8.0f / 16.0f
+                val maxY = 0.0f / 16.0f
+
+                // Rosto base subdividido em grade 8x8 texels com bordas suavizadas e tonalização quente de estopa
+                // para integrar organicamente à cabeça do dummy em vez de parecer uma foto colada.
+                val faceZ = -4.005f / 16.0f
+                val baseU0 = 8.0f / 64.0f
+                val baseV0 = 8.0f / 64.0f
+                val texStep = 1.0f / 64.0f
+                val posStepX = (maxX - minX) / 8.0f
+                val posStepY = (maxY - minY) / 8.0f
+
+                for (ty in 0 until 8) {
+                    for (tx in 0 until 8) {
+                        val isCorner = (tx == 0 || tx == 7) && (ty == 0 || ty == 7)
+                        val isBorder = tx == 0 || tx == 7 || ty == 0 || ty == 7
+
+                        val alpha = when {
+                            isCorner -> 145
+                            isBorder -> 215
+                            else -> 248
+                        }
+                        val shade = if (isBorder) 0.90f else 0.97f
+                        val r = (255 * shade).toInt().coerceIn(0, 255)
+                        val g = (245 * shade).toInt().coerceIn(0, 255)
+                        val b = (230 * shade).toInt().coerceIn(0, 255)
+
+                        val x0 = minX + tx * posStepX
+                        val x1 = x0 + posStepX
+                        val y0 = minY + ty * posStepY
+                        val y1 = y0 + posStepY
+
+                        // Na face frontal (olhando para -Z), X local negativo está à direita do observador,
+                        // portanto espelhamos horizontalmente o índice de texel para alinhar ao rosto do jogador.
+                        val u0 = baseU0 + (7 - tx) * texStep
+                        val u1 = u0 + texStep
+                        val v0 = baseV0 + ty * texStep
+                        val v1 = v0 + texStep
+
+                        emitQuad(pose, consumer, x0, y0, x1, y1, faceZ, u1, v0, u0, v1, r, g, b, alpha, packedLight, overlay)
+                    }
+                }
+
+                // Segunda camada (hat/hair layer da skin: [40..48, 8..16]) com leve relevo 3D
+                if (state.headEquipment.isEmpty) {
+                    val hatZ = -4.14f / 16.0f
+                    val hatMinX = -4.12f / 16.0f
+                    val hatMaxX = 4.12f / 16.0f
+                    val hatMinY = -8.12f / 16.0f
+                    val hatMaxY = 0.12f / 16.0f
+                    val hatU0 = 40.0f / 64.0f
+                    val hatU1 = 48.0f / 64.0f
+                    val hatV0 = 8.0f / 64.0f
+                    val hatV1 = 16.0f / 64.0f
+
+                    emitQuad(
+                        pose,
+                        consumer,
+                        hatMinX,
+                        hatMinY,
+                        hatMaxX,
+                        hatMaxY,
+                        hatZ,
+                        hatU1,
+                        hatV0,
+                        hatU0,
+                        hatV1,
+                        250,
+                        242,
+                        230,
+                        245,
+                        packedLight,
+                        overlay
+                    )
+                }
+            }
+
+            poseStack.popPose()
+        }
+
+        private fun emitQuad(
+            pose: PoseStack.Pose,
+            consumer: VertexConsumer,
+            x0: Float,
+            y0: Float,
+            x1: Float,
+            y1: Float,
+            z: Float,
+            u0: Float,
+            v0: Float,
+            u1: Float,
+            v1: Float,
+            r: Int,
+            g: Int,
+            b: Int,
+            a: Int,
+            packedLight: Int,
+            overlay: Int
+        ) {
+            consumer.addVertex(pose, x0, y1, z)
+                .setColor(r, g, b, a)
+                .setUv(u0, v1)
+                .setOverlay(overlay)
+                .setLight(packedLight)
+                .setNormal(pose, 0.0f, 0.0f, -1.0f)
+
+            consumer.addVertex(pose, x1, y1, z)
+                .setColor(r, g, b, a)
+                .setUv(u1, v1)
+                .setOverlay(overlay)
+                .setLight(packedLight)
+                .setNormal(pose, 0.0f, 0.0f, -1.0f)
+
+            consumer.addVertex(pose, x1, y0, z)
+                .setColor(r, g, b, a)
+                .setUv(u1, v0)
+                .setOverlay(overlay)
+                .setLight(packedLight)
+                .setNormal(pose, 0.0f, 0.0f, -1.0f)
+
+            consumer.addVertex(pose, x0, y0, z)
+                .setColor(r, g, b, a)
+                .setUv(u0, v0)
+                .setOverlay(overlay)
+                .setLight(packedLight)
+                .setNormal(pose, 0.0f, 0.0f, -1.0f)
+        }
+    }
+
+    private inner class JebColorLayer : RenderLayer<DummyRenderState, DummyModel>(this@DummyRenderer) {
+        override fun submit(
+            poseStack: PoseStack,
+            collector: SubmitNodeCollector,
+            packedLight: Int,
+            state: DummyRenderState,
+            yRot: Float,
+            xRot: Float
+        ) {
+            if (!state.isJeb) return
+
+            val cycleProgress = state.ageInTicks / COLOR_CYCLE_TICKS
             val hue = cycleProgress - kotlin.math.floor(cycleProgress)
             val rgb = Mth.hsvToRgb(hue, COLOR_SATURATION, 1f)
             val color = (0xFF shl 24) or (rgb and 0x00FFFFFF)
-            val model = parentModel
-            val vertexConsumer = ItemRenderer.getFoilBuffer(
-                buffer,
-                RenderType.entityTranslucentEmissive(getTextureLocation(entity)),
-                false,
-                true
+            val texture = getTextureLocation(state)
+            val renderType = RenderTypes.entityTranslucentEmissive(texture)
+            val overlay = LivingEntityRenderer.getOverlayCoords(state, 0f)
+
+            collector.submitModel(
+                parentModel,
+                state,
+                poseStack,
+                renderType,
+                packedLight,
+                overlay,
+                color,
+                null,
+                state.outlineColor,
+                null
+            )
+            collector.submitModelPart(
+                parentModel.base_plate,
+                poseStack,
+                renderType,
+                packedLight,
+                overlay,
+                null,
+                color,
+                null
             )
 
-            model.renderToBuffer(
+            collector.order(1).submitModel(
+                parentModel,
+                state,
                 poseStack,
-                vertexConsumer,
+                RenderTypes.entityGlint(),
                 packedLight,
-                LivingEntityRenderer.getOverlayCoords(entity, 0f),
-                color
+                overlay,
+                -1,
+                null,
+                0,
+                null
+            )
+            collector.order(1).submitModelPart(
+                parentModel.base_plate,
+                poseStack,
+                RenderTypes.entityGlint(),
+                packedLight,
+                overlay,
+                null,
+                -1,
+                null
             )
         }
     }
 
-    private inner class NamedRenderEffectLayer : RenderLayer<DummyEntity, DummyModel>(this@DummyRenderer) {
-        override fun render(
+    private inner class NamedRenderEffectLayer : RenderLayer<DummyRenderState, DummyModel>(this@DummyRenderer) {
+        override fun submit(
             poseStack: PoseStack,
-            buffer: MultiBufferSource,
+            collector: SubmitNodeCollector,
             packedLight: Int,
-            entity: DummyEntity,
-            limbSwing: Float,
-            limbSwingAmount: Float,
-            partialTick: Float,
-            ageInTicks: Float,
-            netHeadYaw: Float,
-            headPitch: Float
+            state: DummyRenderState,
+            yRot: Float,
+            xRot: Float
         ) {
-            val effect = entity.customName?.string ?: return
+            val effect = state.customNameString ?: return
             val renderType = when {
-                effect.equals("-endGateway-", ignoreCase = true) -> RenderType.endGateway()
-                effect.equals("-entityGlint-", ignoreCase = true) -> RenderType.entityGlint()
-                effect.equals("-translucent-", ignoreCase = true) -> RenderType.translucent()
-                effect.equals("-lightning-", ignoreCase = true) -> RenderType.lightning()
-                effect.equals("-clouds-", ignoreCase = true) -> RenderType.clouds()
+                effect.equals("-endGateway-", ignoreCase = true) -> RenderTypes.endGateway()
+                effect.equals("-entityGlint-", ignoreCase = true) -> RenderTypes.entityGlint()
+                effect.equals("-translucent-", ignoreCase = true) -> RenderTypes.entityTranslucent(getTextureLocation(state))
+                effect.equals("-lightning-", ignoreCase = true) -> RenderTypes.lightning()
                 else -> return
             }
 
-            parentModel.renderToBuffer(
+            val overlay = LivingEntityRenderer.getOverlayCoords(state, 0f)
+            collector.order(1).submitModel(
+                parentModel,
+                state,
                 poseStack,
-                buffer.getBuffer(renderType),
+                renderType,
                 packedLight,
-                LivingEntityRenderer.getOverlayCoords(entity, 0f),
-                -1
+                overlay,
+                -1,
+                null,
+                state.outlineColor,
+                null
+            )
+            collector.order(1).submitModelPart(
+                parentModel.base_plate,
+                poseStack,
+                renderType,
+                packedLight,
+                overlay,
+                null,
+                -1,
+                null
             )
         }
     }
 
-    // Textura da entidade (.png em assets/modid/textures/entity/dummy.png)
-    override fun getTextureLocation(entity: DummyEntity): ResourceLocation {
-        return ResourceLocation.fromNamespaceAndPath(TrainingDummy.ID, "textures/entity/training_dummy.png")
+    private inner class HandHologramLayer : RenderLayer<DummyRenderState, DummyModel>(this@DummyRenderer) {
+        override fun submit(
+            poseStack: PoseStack,
+            collector: SubmitNodeCollector,
+            packedLight: Int,
+            state: DummyRenderState,
+            yRot: Float,
+            xRot: Float
+        ) {
+            if (!isRenderingHandHologram) return
+
+            val texture = getTextureLocation(state)
+            val renderType = RenderTypes.entityTranslucentEmissive(texture)
+            val overlay = LivingEntityRenderer.getOverlayCoords(state, 0f)
+
+            collector.order(1).submitCustomGeometry(poseStack, renderType) { pose, baseConsumer ->
+                val snapshotStack = PoseStack()
+                snapshotStack.last().pose().set(pose.pose())
+                snapshotStack.last().normal().set(pose.normal())
+
+                val gradientConsumer = HologramGradientVertexConsumer(baseConsumer)
+                parentModel.setupAnim(state)
+                parentModel.renderToBuffer(
+                    snapshotStack,
+                    gradientConsumer,
+                    packedLight,
+                    overlay,
+                    -1
+                )
+                parentModel.base_plate.render(
+                    snapshotStack,
+                    gradientConsumer,
+                    packedLight,
+                    overlay,
+                    -1
+                )
+            }
+        }
     }
 
-    override fun render(
-        entity: DummyEntity,
-        entityYaw: Float,
-        partialTicks: Float,
+    private class HologramGradientVertexConsumer(
+        private val delegate: VertexConsumer
+    ) : VertexConsumer {
+        private var lastY: Float = 0f
+
+        override fun addVertex(x: Float, y: Float, z: Float): VertexConsumer {
+            lastY = y
+            return delegate.addVertex(x, y, z)
+        }
+
+        override fun setColor(red: Int, green: Int, blue: Int, alpha: Int): VertexConsumer {
+            val t = ((lastY + 0.5f) / 2.0f).coerceIn(0f, 1f)
+            val r = (0f + t * 50f).toInt().coerceIn(0, 255)
+            val g = (255f - t * 95f).toInt().coerceIn(0, 255)
+            val b = 255
+            val a = (200f - t * 140f).toInt().coerceIn(0, 255)
+            return delegate.setColor(r, g, b, a)
+        }
+
+        override fun setColor(color: Int): VertexConsumer {
+            val t = ((lastY + 0.5f) / 2.0f).coerceIn(0f, 1f)
+            val r = (0f + t * 50f).toInt().coerceIn(0, 255)
+            val g = (255f - t * 95f).toInt().coerceIn(0, 255)
+            val b = 255
+            val a = (200f - t * 140f).toInt().coerceIn(0, 255)
+            return delegate.setColor(r, g, b, a)
+        }
+
+        override fun setUv(u: Float, v: Float): VertexConsumer = delegate.setUv(u, v)
+        override fun setUv1(u: Int, v: Int): VertexConsumer = delegate.setUv1(u, v)
+        override fun setUv2(u: Int, v: Int): VertexConsumer = delegate.setUv2(u, v)
+        override fun setNormal(x: Float, y: Float, z: Float): VertexConsumer = delegate.setNormal(x, y, z)
+        override fun setLineWidth(width: Float): VertexConsumer = delegate.setLineWidth(width)
+    }
+
+    override fun createRenderState(): DummyRenderState = DummyRenderState()
+
+    override fun extractRenderState(entity: DummyEntity, state: DummyRenderState, partialTick: Float) {
+        super.extractRenderState(entity, state, partialTick)
+        state.partialTick = partialTick
+        state.dummyEntity = entity
+        state.dummyId = entity.id
+        state.dummyUuid = entity.uuid
+        state.isGui = DummyScreen.isRenderingEntityInGui
+        state.isJeb = entity.customName?.string?.equals("jeb_", ignoreCase = true) == true
+        state.customNameString = entity.customName?.string
+        state.skinTexture = if (entity.customName != null && entity.profilePlayer != null) {
+            ClientSkinUtils.getPlayerSkin(entity.profilePlayer)?.body()?.texturePath()
+        } else {
+            null
+        }
+        state.trainingMode = entity.trainingModuleConfig.trainingModo
+        state.windowShape = entity.windowShape
+        state.detailedDamage = entity.detailedDamageWindow
+        state.dps = entity.dpsTotalDamage
+        state.maxDamage = entity.dpsHighestHit
+        state.totalDamage = entity.dpsTotalDamage
+        state.hitCount = entity.dpsHitCount
+        state.dummyTexture = getTextureLocation(state)
+    }
+
+    override fun getTextureLocation(state: DummyRenderState): Identifier {
+        return Identifier.fromNamespaceAndPath(TrainingDummy.ID, "textures/entity/training_dummy.png")
+    }
+
+    override fun submit(
+        state: DummyRenderState,
         poseStack: PoseStack,
-        buffer: MultiBufferSource,
-        packedLight: Int
+        collector: SubmitNodeCollector,
+        cameraState: CameraRenderState
     ) {
+        super.submit(state, poseStack, collector, cameraState)
 
-        super.render(entity, entityYaw, partialTicks, poseStack, buffer, packedLight)
-
-        renderFloatingWindowModo(entity, partialTicks, poseStack, buffer, packedLight)
-
+        val entity = state.dummyEntity
+        if (entity != null && !state.isGui && !isRenderingHandHologram) {
+            renderFloatingWindowModo(entity, poseStack, collector, state.lightCoords, partialTick = state.partialTick)
+        }
     }
 
+    override fun shouldRender(
+        entity: DummyEntity,
+        camera: net.minecraft.client.renderer.culling.Frustum,
+        camX: Double,
+        camY: Double,
+        camZ: Double
+    ): Boolean {
+        val expandedBox = entity.boundingBox.inflate(1.5, 3.5, 1.5)
+        return camera.isVisible(expandedBox)
+    }
 
     companion object {
+        var isRenderingHandHologram: Boolean = false
+
+        fun windowDefault3(window: FloatingWindow.Builder, entity: DummyEntity) {
+            window
+                .setOffset(0.0, 2.8, 0.0)
+                .setScale(0.03f)
+                .attachToEntityRotation(entity)
+                .setAlignment(WindowAlignment.CENTER)
+                .setBackground(WindowColor.Gradient(0xFFFFFFFFL, 0x3C3C3CAAL))
+                .setVolume3D(Volume3DConfig.DEFAULT)
+                .addText(
+                    text = "★ MESTRE DAS ARMAS ★",
+                    color = WindowColor.Rainbow(speed = 0.8f),
+                    shadow = true,
+                    textScale = 1.3f
+                )
+                .addText(
+                    component = Component.literal("Nível 100"),
+                    color = WindowColor.Solid(0xFFFBBF24L),
+                    shadow = true,
+                    textScale = 0.9f
+                )
+                .build()
+        }
+
         fun renderFloatingWindowModo(
             entity: DummyEntity,
-            partialTicks: Float,
             poseStack: PoseStack,
-            buffer: MultiBufferSource,
+            collector: SubmitNodeCollector,
             packedLight: Int,
-            projection: DummyWindowProjection? = null
-
+            projection: DummyWindowProjection? = null,
+            partialTick: Float = 0f
         ) {
-
-
             val modoAtual = entity.trainingModuleConfig.trainingModo
             if (projection == null && modoAtual != TrainingModos.DPS && entity.displayTicks <= 0) return
 
             val damageData = entity.damageData
             val damageDataOld = entity.damageDataOld
 
-
             val window = FloatingWindow.Builder()
 
             when (modoAtual) {
-
                 TrainingModos.DEFAULT -> {
-                    //windowDefaultDog(window)
-
                     windowConfigDefault(
                         window,
                         entity,
                         detailed = entity.detailedDamageWindow,
                         projection = projection
                     )
-
-
                 }
 
                 TrainingModos.DPS -> {
@@ -221,31 +656,28 @@ class DummyRenderer(context: EntityRendererProvider.Context) : HumanoidMobRender
                         window.setFaceCamera(true)
                             .setOffset(projection.x, projection.y, projection.z)
                     }
+                    applyWindowShape(window, entity)
                     window
                         .setAlignment(WindowAlignment.CENTER)
                         .setPadding(2f)
                         .setSize(38f, 30f, autoScaleContent = true, autoFitWidth = true, autoFitHeight = true)
-                        .setCornerRadius(3f)
-
                         .setBorder(
                             when (entity.dpsTestState) {
                                 DummyEntity.DPS_STATE_READY -> WindowColor.AnimatedGradient(
-                                    argbStart = 0xFF65E8A0,
-                                    argbEnd = 0xFF21B6A8,
+                                    argbStart = 0xFF65E8A0L,
+                                    argbEnd = 0xFF21B6A8L,
                                     speed = 0.8f,
                                     scale = 0.8f
                                 )
-
                                 DummyEntity.DPS_STATE_COOLDOWN -> WindowColor.AnimatedGradient(
-                                    argbStart = 0xFFFFB454,
-                                    argbEnd = 0xFFFF5A5A,
+                                    argbStart = 0xFFFFB454L,
+                                    argbEnd = 0xFFFF5A5AL,
                                     speed = 0.8f,
                                     scale = 0.8f
                                 )
-
                                 else -> WindowColor.AnimatedGradient(
-                                    argbStart = 0xFFC5A5FB,
-                                    argbEnd = 0xFF5700AC,
+                                    argbStart = 0xFFC5A5FBL,
+                                    argbEnd = 0xFF5700ACL,
                                     speed = 1.2f,
                                     scale = 0.8f
                                 )
@@ -254,8 +686,8 @@ class DummyRenderer(context: EntityRendererProvider.Context) : HumanoidMobRender
                         )
                         .setBackground(
                             WindowColor.Gradient(
-                                argbStart = 0xF0181C2A,
-                                argbEnd = 0xF02B233D
+                                argbStart = 0xF0181C2AL,
+                                argbEnd = 0xF02B233DL
                             )
                         )
 
@@ -266,7 +698,7 @@ class DummyRenderer(context: EntityRendererProvider.Context) : HumanoidMobRender
                     when (entity.dpsTestState) {
                         DummyEntity.DPS_STATE_MEASURING -> {
                             val remainingSeconds =
-                                (entity.dpsTicksRemaining - partialTicks.coerceIn(0f, 1f)).coerceAtLeast(0f) / 20f
+                                (entity.dpsTicksRemaining - partialTick.coerceIn(0f, 1f)).coerceAtLeast(0f) / 20f
                             val elapsedTicks = DummyEntity.DPS_TEST_DURATION_TICKS - entity.dpsTicksRemaining
                             val currentDps = if (elapsedTicks >= 20) {
                                 entity.dpsTotalDamage / (elapsedTicks / 20f)
@@ -361,7 +793,7 @@ class DummyRenderer(context: EntityRendererProvider.Context) : HumanoidMobRender
                                 "message.trainingdummy.accumulated_value",
                                 String.format(Locale.ROOT, "%.1f", damageData.newDamage)
                             ),
-                            color = WindowColor.Pulse(0xFF9BE7FF),
+                            color = WindowColor.Pulse(0xFF9BE7FFL),
                             shadow = true,
                             textScale = 2.5f,
                             alignment = WindowElement.Text.TextAlignment.CENTER
@@ -391,7 +823,7 @@ class DummyRenderer(context: EntityRendererProvider.Context) : HumanoidMobRender
                         projection = projection,
                         projectionOffsetX = -0.35
                     )
-                    window2.build().render(poseStack, buffer, packedLight)
+                    window2.build().render(poseStack, collector, packedLight)
 
                     val difference = damageData.newDamage - damageDataOld.newDamage
                     val winnerStack = when {
@@ -443,36 +875,34 @@ class DummyRenderer(context: EntityRendererProvider.Context) : HumanoidMobRender
                             alignment = WindowElement.Text.TextAlignment.CENTER
                         )
                     }
-                    differenceWindow.build().render(poseStack, buffer, packedLight)
+                    differenceWindow.build().render(poseStack, collector, packedLight)
                 }
-
-                //null -> {return}
             }
 
-            window.build().render(poseStack, buffer, packedLight)
-
+            window.build().render(poseStack, collector, packedLight)
         }
 
-        private val armorHudIcon = ResourceLocation.fromNamespaceAndPath(
+        private val armorHudIcon = Identifier.fromNamespaceAndPath(
             "minecraft",
             "textures/gui/sprites/hud/armor_full.png"
         )
 
-        private val absorptionHudIcon = ResourceLocation.fromNamespaceAndPath(
+        private val absorptionHudIcon = Identifier.fromNamespaceAndPath(
             "minecraft",
             "textures/gui/sprites/hud/heart/absorbing_full.png"
         )
 
-        private val enchantItem = Items.ENCHANTED_BOOK.defaultInstance
-        private val potionItem = Items.POTION.defaultInstance.also {
-            it.set(
-                DataComponents.POTION_CONTENTS,
-                PotionContents(Potions.HEALING)
-            )
+        private val enchantItem by lazy { Items.ENCHANTED_BOOK.defaultInstance }
+        private val potionItem by lazy {
+            Items.POTION.defaultInstance.also {
+                it.set(
+                    DataComponents.POTION_CONTENTS,
+                    PotionContents(Potions.HEALING)
+                )
+            }
         }
-        private val innateResistanceItem = Items.STRUCTURE_VOID.defaultInstance
-        private val invulnerabilityItem = Items.BARRIER.defaultInstance
-
+        private val innateResistanceItem by lazy { Items.STRUCTURE_VOID.defaultInstance }
+        private val invulnerabilityItem by lazy { Items.BARRIER.defaultInstance }
 
         private fun windowConfigDefault(
             window: FloatingWindow.Builder,
@@ -480,7 +910,6 @@ class DummyRenderer(context: EntityRendererProvider.Context) : HumanoidMobRender
             detailed: Boolean = false,
             projection: DummyWindowProjection? = null
         ) {
-
             val damageData = entity.damageData
             if (projection == null) {
                 window.attachToEntityRotation(entity).setOffset(0.9, 2.0, 0.0)
@@ -488,17 +917,16 @@ class DummyRenderer(context: EntityRendererProvider.Context) : HumanoidMobRender
                 window.setFaceCamera(true)
                     .setOffset(projection.x, projection.y, projection.z)
             }
-            window.setShape(PanelShape.circle())
+
+            applyWindowShape(window, entity)
+
             window.setSize(30f, 30f, autoScaleContent = true, autoFitWidth = true, autoFitHeight = true)
                 .setAlignment(WindowAlignment.CENTER)
                 .setPadding(3f)
-
-
-
                 .setBorder(
                     WindowColor.AnimatedGradient(
-                        argbStart = 0xC5A5FB,
-                        argbEnd = 0x5700ac,
+                        argbStart = 0xFFC5A5FBL,
+                        argbEnd = 0xFF5700ACL,
                         speed = 1.2f,
                         scale = 0.8f
                     ),
@@ -506,8 +934,8 @@ class DummyRenderer(context: EntityRendererProvider.Context) : HumanoidMobRender
                 )
                 .setBackground(
                     WindowColor.Gradient(
-                        argbStart = 0xF0181C2A,
-                        argbEnd = 0xF02B233D
+                        argbStart = 0xF0181C2AL,
+                        argbEnd = 0xF02B233DL
                     )
                 )
 
@@ -527,15 +955,14 @@ class DummyRenderer(context: EntityRendererProvider.Context) : HumanoidMobRender
                     )
                     .addSeparator(
                         color = WindowColor.AnimatedGradient(
-                            argbStart = 0xFF67E8F9,
-                            argbEnd = 0xFF8B5CF6,
+                            argbStart = 0xFF67E8F9L,
+                            argbEnd = 0xFF8B5CF6L,
                             speed = 1.2f,
                             scale = 0.8f
                         ),
                         thickness = 0.5f,
                         margin = 2f
                     )
-
                     .addText(
                         Component.translatable("message.trainingdummy.final_damage"),
                         textScale = 0.8f,
@@ -554,13 +981,13 @@ class DummyRenderer(context: EntityRendererProvider.Context) : HumanoidMobRender
                 }",
                 color = if (damageData.isCriticalHit) {
                     WindowColor.AnimatedGradient(
-                        argbStart = 0xFF0000,
-                        argbEnd = 0xff8c00,
+                        argbStart = 0xFF0000L,
+                        argbEnd = 0xff8c00L,
                         speed = 5.0f,
                         scale = 0.8f
                     )
                 } else {
-                    WindowColor.Pulse(0xFF9BE7FF)
+                    WindowColor.Pulse(0xFF9BE7FFL)
                 },
                 shadow = true,
                 alignment = WindowElement.Text.TextAlignment.CENTER,
@@ -576,17 +1003,15 @@ class DummyRenderer(context: EntityRendererProvider.Context) : HumanoidMobRender
                     shadow = true,
                     alignment = WindowElement.Text.TextAlignment.CENTER,
                     textScale = 0.8f,
-                    color = WindowColor.Pulse(color = 0xff1a1a, speed = 1.5f)
+                    color = WindowColor.Pulse(color = 0xff1a1aL, speed = 1.5f)
                 )
-
             }
 
             if (damageData.isReductions()) {
-
                 window.addSeparator(
                     color = WindowColor.AnimatedGradient(
-                        argbStart = 0xFF67E8F9,
-                        argbEnd = 0xFF8B5CF6,
+                        argbStart = 0xFF67E8F9L,
+                        argbEnd = 0xFF8B5CF6L,
                         speed = 1.2f,
                         scale = 0.8f
                     ),
@@ -663,17 +1088,31 @@ class DummyRenderer(context: EntityRendererProvider.Context) : HumanoidMobRender
 
                 window.addSeparator(
                     color = WindowColor.AnimatedGradient(
-                        argbStart = 0xFF67E8F9,
-                        argbEnd = 0xFF8B5CF6,
+                        argbStart = 0xFF67E8F9L,
+                        argbEnd = 0xFF8B5CF6L,
                         speed = 1.2f,
                         scale = 0.8f
                     ),
                     thickness = 0.5f,
                     margin = 2f
                 )
-
             }
+        }
 
+        private fun applyWindowShape(window: FloatingWindow.Builder, entity: DummyEntity) {
+            when (val type = entity.windowShape) {
+                WindowShapeType.ROUNDED -> {
+                    window.setCornerRadius(3f)
+                    window.setShape(WindowShapes.toPanelShape(type))
+                }
+                WindowShapeType.ROUNDED_RECTANGLE -> {
+                    window.setCornerRadius(8f)
+                    window.setShape(WindowShapes.toPanelShape(type))
+                }
+                else -> {
+                    window.setShape(WindowShapes.toPanelShape(type))
+                }
+            }
         }
 
         private fun configureModeWindow(
@@ -698,14 +1137,15 @@ class DummyRenderer(context: EntityRendererProvider.Context) : HumanoidMobRender
                         projection.z + projectionOffsetX * projection.rightZ
                     )
             }
-            window.setSize(width, height, autoScaleContent = true, autoFitWidth = true, autoFitHeight = true)
+            applyWindowShape(window, entity)
+            window
                 .setAlignment(WindowAlignment.CENTER)
-                .setPadding(3f)
-                .setCornerRadius(3f)
+                .setPadding(2f)
+                .setSize(width, height, autoScaleContent = true, autoFitWidth = true, autoFitHeight = true)
                 .setBorder(
                     WindowColor.AnimatedGradient(
-                        argbStart = 0xFFC5A5FB,
-                        argbEnd = 0xFF5700AC,
+                        argbStart = 0xFFC5A5FBL,
+                        argbEnd = 0xFF5700ACL,
                         speed = 1.2f,
                         scale = 0.8f
                     ),
@@ -713,196 +1153,79 @@ class DummyRenderer(context: EntityRendererProvider.Context) : HumanoidMobRender
                 )
                 .setBackground(
                     WindowColor.Gradient(
-                        argbStart = 0xF0181C2A,
-                        argbEnd = 0xF02B233D
+                        argbStart = 0xF0181C2AL,
+                        argbEnd = 0xF02B233DL
                     )
                 )
                 .addText(
                     title,
-                    color = 0xFF9BE7FF.toInt(),
-                    shadow = true,
+                    color = 0xFFFFFFFF.toInt(),
+                    textScale = 0.85f,
                     alignment = WindowElement.Text.TextAlignment.CENTER
                 )
         }
+
+        private fun modeWindowSeparator() = WindowColor.AnimatedGradient(
+            argbStart = 0xFF67E8F9L,
+            argbEnd = 0xFF8B5CF6L,
+            speed = 1.2f,
+            scale = 0.8f
+        )
 
         private fun buildComparisonPanel(
             window: FloatingWindow.Builder,
             entity: DummyEntity,
             title: Component,
             stack: ItemStack,
-            damage: Float,
+            damageValue: Float,
             offsetX: Double,
             projection: DummyWindowProjection? = null,
             projectionOffsetX: Double = 0.0
         ) {
             configureModeWindow(
-                window = window,
-                entity = entity,
-                title = title,
+                window,
+                entity,
+                title,
                 offsetX = offsetX,
-                width = 24f,
-                height = 25f,
                 projection = projection,
                 projectionOffsetX = projectionOffsetX
             )
             window.addSeparator(color = modeWindowSeparator(), thickness = 0.5f, margin = 2f)
             if (stack.isEmpty) {
                 window.addText(
-                    Component.translatable("message.trainingdummy.comparison.no_weapon"),
-                    color = 0xFFB9C9DC.toInt(),
+                    Component.translatable("message.trainingdummy.bare_hands"),
+                    color = 0xFF9BE7FF.toInt(),
                     textScale = 0.8f,
                     alignment = WindowElement.Text.TextAlignment.CENTER
                 )
             } else {
-                window.addItemText(
-                    stack,
-                    stack.hoverName,
-                    itemSize = 18f,
-                    textScale = 0.8f,
-                    alignment = WindowElement.Text.TextAlignment.CENTER
-                )
+                window.addItem(stack, size = 18f)
             }
-            window.addSeparator(color = modeWindowSeparator(), thickness = 0.5f, margin = 2f)
-                .addText(
-                    Component.literal(String.format(Locale.ROOT, "%.1f", damage)),
-                    color = WindowColor.Pulse(0xFF9BE7FF),
-                    shadow = true,
-                    textScale = 2f,
-                    alignment = WindowElement.Text.TextAlignment.CENTER
-                )
+            window.addText(
+                String.format(Locale.ROOT, "%.1f", damageValue),
+                color = 0xFF9BE7FF.toInt(),
+                shadow = true,
+                textScale = 2.0f,
+                alignment = WindowElement.Text.TextAlignment.CENTER
+            )
         }
 
-        private fun modeWindowSeparator(): WindowColor.AnimatedGradient = WindowColor.AnimatedGradient(
-            argbStart = 0xFF67E8F9,
-            argbEnd = 0xFF8B5CF6,
-            speed = 1.2f,
-            scale = 0.8f
-        )
-
-        private fun windowDefault(
-            window: FloatingWindow.Builder,
-            damageData: DamageData,
-            entity: DummyEntity,
-            title: Component = Component.translatable("message.trainingdummy.damage_title")
-        ) {
-
-            window.attachToEntityRotation(entity)
-                .setOffset(0.6, 2.0, 0.0)
-                .setSize(24f, 24f, autoScaleContent = true, autoFitWidth = true, autoFitHeight = true)
-                .setAlignment(WindowAlignment.CENTER)
-                .setPadding(1f)
-                .setCornerRadius(3f)
-                .setBorder(
-                    WindowColor.AnimatedGradient(
-                        argbStart = 0xFF67E8F9,
-                        argbEnd = 0xFF8B5CF6,
-                        speed = 1.2f,
-                        scale = 0.8f
-                    ),
-                    width = 0.75f
-                )
-                .setBackground(
-                    WindowColor.Gradient(
-                        argbStart = 0xF0181C2A,
-                        argbEnd = 0xF02B233D
-                    )
-                )
-                .addText(title, color = 0xFF9BE7FF.toInt(), shadow = true)
-                .addSeparator(
-                    color = WindowColor.AnimatedGradient(
-                        argbStart = 0xFF67E8F9,
-                        argbEnd = 0xFF8B5CF6,
-                        speed = 1.2f,
-                        scale = 0.8f
-                    ),
-                    thickness = 0.5f,
-                    margin = 2f
-                )
-
-            var finalDamage: Component
-
-            if (damageData.isReductions()) {
-                window.addText(
-                    Component.translatable(
-                        "message.trainingdummy.raw_damage",
-                        String.format(Locale.ROOT, "%.1f", damageData.originalDamage)
-                    ).withStyle(ChatFormatting.RED)
-                )
-                    .addSeparator(color = WindowColor.Rainbow(speed = 1.0f), thickness = 0.5f, margin = 2f)
-                    .addText(Component.translatable("message.trainingdummy.reductions"), color = 0x0087F0.toInt())
+        private fun modeReductionText(
+            detailed: Boolean,
+            translationKey: String,
+            value: Float
+        ): Component {
+            val formattedValue = if (detailed) {
+                value.toString()
             } else {
-                window.setPadding(3f);
+                String.format(Locale.ROOT, "%.1f", value)
             }
 
-            if (damageData.armor > 0.0f) {
-                window.addText(reductionText("message.trainingdummy.reduction.armor", damageData.armor))
-            }
-            if (damageData.enchantments > 0.0f) {
-                window.addText(reductionText("message.trainingdummy.reduction.enchantments", damageData.enchantments))
-            }
-            if (damageData.mobEffects > 0.0f) {
-                window.addText(reductionText("message.trainingdummy.reduction.effects", damageData.mobEffects))
-            }
-            if (damageData.absorption > 0.0f) {
-                window.addText(reductionText("message.trainingdummy.reduction.absorption", damageData.absorption))
-            }
-            if (damageData.innateResistance > 0.0f) {
-                window.addText(
-                    reductionText(
-                        "message.trainingdummy.reduction.innate_resistance",
-                        damageData.innateResistance
-                    )
-                )
-            }
-            if (damageData.invulnerability > 0.0f) {
-                window.addText(
-                    reductionText(
-                        "message.trainingdummy.reduction.invulnerability",
-                        damageData.invulnerability
-                    )
-                )
-            }
-
-            if (damageData.isReductions()) {
-                window.addSeparator(color = WindowColor.Rainbow(speed = 1.0f), thickness = 0.5f, margin = 2f)
-                finalDamage = Component.translatable(
-                    "message.trainingdummy.final_damage_value",
-                    String.format(Locale.ROOT, "%.1f", damageData.newDamage)
-                )
+            return if (detailed) {
+                Component.translatable(translationKey, formattedValue)
             } else {
-                finalDamage = Component.literal("%.2f".format(Locale.ROOT, damageData.newDamage))
-            }
-
-            if (damageData.isCriticalHit) {
-                window.addText(
-                    finalDamage.append(" ").append(
-                        Component.translatable(
-                            "message.trainingdummy.critical_multiplier",
-                            String.format(Locale.ROOT, "%.1f", damageData.damageMultiplier)
-                        )
-                    ),
-                    color = WindowColor.AnimatedGradient(
-                        argbStart = 0xFF0000, // Cor inicial (Branco)
-                        argbEnd = 0xFFFFFF,   // Cor final (Vermelho)
-                        speed = 5.0f,          // Velocidade do deslocamento
-                        scale = 1.0f           // Densidade/Frequência das ondas no texto
-                    )
-                )
-            } else {
-                window.addText(finalDamage)
+                Component.literal("-$formattedValue")
             }
         }
-
-        private fun modeReductionText(detailed: Boolean, nameKey: String, value: Float): Component {
-            val key = if (detailed) nameKey else "message.trainingdummy.reduction.icon_amount"
-            val formattedValue = Component.literal(String.format(Locale.ROOT, "%.1f", value))
-                .withStyle(ChatFormatting.WHITE)
-            return Component.translatable(key, formattedValue)
-                .withStyle(ChatFormatting.GREEN)
-        }
-
-        private fun reductionText(key: String, value: Float): Component =
-            Component.translatable(key, String.format(Locale.ROOT, "%.1f", value))
-                .withStyle(ChatFormatting.GREEN)
     }
 }

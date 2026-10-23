@@ -4,7 +4,7 @@
 # Note that there are a couple of TOML lists in this file.
 # Find more information on toml format here:  https://github.com/toml-lang/toml
 # The name of the mod loader type to load - for regular FML @Mod mods it should be javafml
-modLoader = "kotlinforforge" #mandatory
+modLoader = "klf" #mandatory
 # A version range to match for said mod loader - for regular FML @Mod it will be the the FML version. This is currently 47.
 loaderVersion = "${loader_version_range}" #mandatory
 # The license for you mod. This is mandatory metadata and allows for easier comprehension of your redistributive properties.
@@ -24,8 +24,9 @@ displayName = "${mod_name}" #mandatory
 #updateJSONURL="https://change.me.example.invalid/updates.json" #optional
 # A URL for the "homepage" for this mod, displayed in the mod UI
 #displayURL="https://change.me.to.your.mods.homepage.example.invalid/" #optional
-# A file name (in the root of the mod JAR) containing a logo for display
-#logoFile="trainingdummy.png" #optional
+# A file name (in the root of the mod JAR) containing an icon for display
+#iconFile="trainingdummy.png" #optional
+#bannerFile="trainingdummy_banner.png" #optional
 # A text field displayed in the mod UI
 #credits="" #optional
 # A text field displayed in the mod UI
@@ -46,7 +47,7 @@ config = "${mod_id}.mixins.json"
 # The coremods config file path is not configurable and is always loaded from META-INF/coremods.json
 
 # A dependency - use the . to indicate dependency for a specific modid. Dependencies are optional.
-[[dependencies."${mod_id}"]] #optional
+[[dependencies."${mod_id}"]] #mandatory
 # the modid of the dependency
 modId = "neoforge" #mandatory
 # The type of the dependency. Can be one of "required", "optional", "incompatible" or "discouraged" (case insensitive).
@@ -63,6 +64,7 @@ versionRange = "${neo_version_range}" #mandatory
 ordering = "NONE"
 # Side this dependency is applied on - BOTH, CLIENT, or SERVER
 side = "BOTH"
+
 # Here's another dependency
 [[dependencies."${mod_id}"]]
 modId = "minecraft"

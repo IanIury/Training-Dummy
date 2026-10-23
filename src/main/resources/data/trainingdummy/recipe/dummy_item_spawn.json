@@ -7,18 +7,10 @@
     "L#L"
   ],
   "key": {
-    "C": {
-      "item": "minecraft:carved_pumpkin"
-    },
-    "#": {
-      "item": "minecraft:stick"
-    },
-    "H": {
-      "item": "minecraft:hay_block"
-    },
-    "L": {
-      "tag": "minecraft:logs"
-    }
+    "C": "minecraft:carved_pumpkin",
+    "#": "minecraft:stick",
+    "H": "minecraft:hay_block",
+    "L": "#minecraft:logs"
   },
   "result": {
     "id": "trainingdummy:dummy_item_spawn"

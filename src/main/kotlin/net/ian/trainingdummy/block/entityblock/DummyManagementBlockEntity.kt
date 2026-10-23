@@ -12,6 +12,8 @@ import net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket
 import net.minecraft.server.level.ServerLevel
 import net.minecraft.world.level.block.entity.BlockEntity
 import net.minecraft.world.level.block.state.BlockState
+import net.minecraft.world.level.storage.ValueInput
+import net.minecraft.world.level.storage.ValueOutput
 import net.minecraft.world.phys.AABB
 import java.util.UUID
 import kotlin.math.ceil
@@ -325,69 +327,59 @@ class DummyManagementBlockEntity(pos: BlockPos, blockState: BlockState) :
         currentLevel.sendBlockUpdated(worldPosition, blockState, blockState, 3)
     }
 
-    override fun saveAdditional(tag: CompoundTag, registries: HolderLookup.Provider) {
-        super.saveAdditional(tag, registries)
-        tag.putInt("mode", mode.ordinal)
-        tag.putInt("max_health", maxHealth)
-        tag.putInt("duration_seconds", durationSeconds)
-        tag.putInt("reset_seconds", resetSeconds)
-        tag.putBoolean("auto_regeneration", autoRegeneration)
-        tag.putInt("regeneration_per_second", regenerationPerSecond)
-        tag.putBoolean("live_timed_output", liveTimedOutput)
-        tag.putFloat("target_average_damage", targetAverageDamage)
-        tag.putFloat("target_damage", targetDamage)
-        tag.putInt("target_hits", targetHits)
-        tag.putInt("dps_window_seconds", dpsWindowSeconds)
-        tag.putInt("output_signal", outputSignal)
-        tag.putBoolean("invert_output", invertOutput)
-        tag.putFloat("current_health", currentHealth)
-        tag.putInt("timer_ticks", timerTicks)
-        tag.putInt("reset_ticks", resetTicks)
-        tag.putBoolean("timed_test_active", timedTestActive)
-        tag.putBoolean("timed_test_finished", timedTestFinished)
-        tag.putFloat("dps_total_damage", dpsTotalDamage)
-        tag.putInt("dps_hit_count", dpsHitCount)
+    override fun saveAdditional(output: ValueOutput) {
+        super.saveAdditional(output)
+        output.putInt("mode", mode.ordinal)
+        output.putInt("max_health", maxHealth)
+        output.putInt("duration_seconds", durationSeconds)
+        output.putInt("reset_seconds", resetSeconds)
+        output.putBoolean("auto_regeneration", autoRegeneration)
+        output.putInt("regeneration_per_second", regenerationPerSecond)
+        output.putBoolean("live_timed_output", liveTimedOutput)
+        output.putFloat("target_average_damage", targetAverageDamage)
+        output.putFloat("target_damage", targetDamage)
+        output.putInt("target_hits", targetHits)
+        output.putInt("dps_window_seconds", dpsWindowSeconds)
+        output.putInt("output_signal", outputSignal)
+        output.putBoolean("invert_output", invertOutput)
+        output.putFloat("current_health", currentHealth)
+        output.putInt("timer_ticks", timerTicks)
+        output.putInt("reset_ticks", resetTicks)
+        output.putBoolean("timed_test_active", timedTestActive)
+        output.putBoolean("timed_test_finished", timedTestFinished)
+        output.putFloat("dps_total_damage", dpsTotalDamage)
+        output.putInt("dps_hit_count", dpsHitCount)
     }
 
-    override fun loadAdditional(tag: CompoundTag, registries: HolderLookup.Provider) {
-        super.loadAdditional(tag, registries)
-        mode = if (tag.contains("mode")) {
-            DummyManagementMode.entries.getOrElse(tag.getInt("mode")) { DummyManagementMode.HEALTH }
-        } else {
-            DummyManagementMode.HEALTH
-        }
-        maxHealth = (if (tag.contains("max_health")) tag.getInt("max_health") else 1000).coerceIn(1, 100_000)
-        durationSeconds = (if (tag.contains("duration_seconds")) tag.getInt("duration_seconds") else 5).coerceIn(1, 300)
-        resetSeconds = (if (tag.contains("reset_seconds")) tag.getInt("reset_seconds") else 0).coerceIn(0, 300)
-        autoRegeneration = tag.contains("auto_regeneration") && tag.getBoolean("auto_regeneration")
-        regenerationPerSecond =
-            (if (tag.contains("regeneration_per_second")) tag.getInt("regeneration_per_second") else 10).coerceIn(1, 1000)
-        liveTimedOutput = !tag.contains("live_timed_output") || tag.getBoolean("live_timed_output")
-        targetAverageDamage =
-            (if (tag.contains("target_average_damage")) tag.getFloat("target_average_damage") else 5f).coerceIn(0.5f, 1000f)
-        targetDamage =
-            (if (tag.contains("target_damage")) tag.getFloat("target_damage") else 5f).coerceIn(0.5f, 1000f)
-        targetHits = (if (tag.contains("target_hits")) tag.getInt("target_hits") else 10).coerceIn(1, 1000)
-        dpsWindowSeconds = (if (tag.contains("dps_window_seconds")) tag.getInt("dps_window_seconds") else 10).coerceIn(1, 300)
-        outputSignal = if (tag.contains("output_signal")) {
-            tag.getInt("output_signal").coerceIn(0, 15)
-        } else {
-            if (mode == DummyManagementMode.DPS) 0 else 15
-        }
-        invertOutput = tag.getBoolean("invert_output")
-        currentHealth = (if (tag.contains("current_health")) tag.getFloat("current_health") else maxHealth.toFloat())
-            .coerceIn(0f, maxHealth.toFloat())
-        timerTicks = tag.getInt("timer_ticks").coerceAtLeast(0)
-        resetTicks = tag.getInt("reset_ticks").coerceAtLeast(0)
-        timedTestActive = tag.getBoolean("timed_test_active")
-        timedTestFinished = tag.getBoolean("timed_test_finished")
-        dpsTotalDamage = tag.getFloat("dps_total_damage").coerceAtLeast(0f)
-        dpsHitCount = tag.getInt("dps_hit_count").coerceAtLeast(0)
+    override fun loadAdditional(input: ValueInput) {
+        super.loadAdditional(input)
+        mode = input.getInt("mode").map {
+            DummyManagementMode.entries.getOrElse(it) { DummyManagementMode.HEALTH }
+        }.orElse(DummyManagementMode.HEALTH)
+        maxHealth = input.getIntOr("max_health", 1000).coerceIn(1, 100_000)
+        durationSeconds = input.getIntOr("duration_seconds", 5).coerceIn(1, 300)
+        resetSeconds = input.getIntOr("reset_seconds", 0).coerceIn(0, 300)
+        autoRegeneration = input.getBooleanOr("auto_regeneration", false)
+        regenerationPerSecond = input.getIntOr("regeneration_per_second", 10).coerceIn(1, 1000)
+        liveTimedOutput = input.getBooleanOr("live_timed_output", true)
+        targetAverageDamage = input.getFloatOr("target_average_damage", 5f).coerceIn(0.5f, 1000f)
+        targetDamage = input.getFloatOr("target_damage", 5f).coerceIn(0.5f, 1000f)
+        targetHits = input.getIntOr("target_hits", 10).coerceIn(1, 1000)
+        dpsWindowSeconds = input.getIntOr("dps_window_seconds", 10).coerceIn(1, 300)
+        outputSignal = input.getIntOr("output_signal", if (mode == DummyManagementMode.DPS) 0 else 15).coerceIn(0, 15)
+        invertOutput = input.getBooleanOr("invert_output", false)
+        currentHealth = input.getFloatOr("current_health", maxHealth.toFloat()).coerceIn(0f, maxHealth.toFloat())
+        timerTicks = input.getIntOr("timer_ticks", 0).coerceAtLeast(0)
+        resetTicks = input.getIntOr("reset_ticks", 0).coerceAtLeast(0)
+        timedTestActive = input.getBooleanOr("timed_test_active", false)
+        timedTestFinished = input.getBooleanOr("timed_test_finished", false)
+        dpsTotalDamage = input.getFloatOr("dps_total_damage", 0f).coerceAtLeast(0f)
+        dpsHitCount = input.getIntOr("dps_hit_count", 0).coerceAtLeast(0)
         linkedDummyUuid = null
         lookupTicks = 0
     }
 
-    override fun getUpdatePacket(): Packet<ClientGamePacketListener?>? =
+    override fun getUpdatePacket(): Packet<ClientGamePacketListener>? =
         ClientboundBlockEntityDataPacket.create(this)
 
     override fun getUpdateTag(registries: HolderLookup.Provider): CompoundTag =

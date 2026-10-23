@@ -4,6 +4,8 @@ import net.ian.trainingdummy.TrainingDummy
 import net.ian.trainingdummy.block.entityblock.DummyManagementBlockEntity
 import net.ian.trainingdummy.entity.DummyEntity
 import net.ian.trainingdummy.event.utils.DamageData
+import net.ian.trainingdummy.rank.DummyRankData
+import net.minecraft.server.level.ServerPlayer
 import net.minecraft.util.Mth
 import net.minecraft.world.entity.player.Player
 import net.minecraft.world.item.ItemStack
@@ -18,12 +20,10 @@ import net.neoforged.neoforge.event.entity.player.CriticalHitEvent
 object ModEvents {
 
     @SubscribeEvent
-    fun onDamage(event: LivingDamageEvent.Post){
-
+    fun onDamage(event: LivingDamageEvent.Post) {
         if (event.entity.level().isClientSide) return
 
-        //val player : Player = event.source.entity as? Player ?: return
-        val vitima : DummyEntity = event.entity as? DummyEntity ?: return
+        val vitima: DummyEntity = event.entity as? DummyEntity ?: return
 
         val damageData = if (event.source.entity is Player) vitima.preDamageData else DamageData()
         vitima.preDamageData = DamageData()
@@ -32,11 +32,10 @@ object ModEvents {
         vitima.damageStack = event.source.weaponItem ?: ItemStack.EMPTY
 
         val newDamaData = damageData.copy(
-            newDamage = event.newDamage,
+            newDamage = event.inflictedDamage,
             originalDamage = event.originalDamage,
             blockedDamage = event.blockedDamage,
             shieldDamage = event.shieldDamage,
-
             invulnerability = event.getReduction(Reduction.INVULNERABILITY),
             armor = event.getReduction(Reduction.ARMOR),
             enchantments = event.getReduction(Reduction.ENCHANTMENTS),
@@ -45,23 +44,26 @@ object ModEvents {
             innateResistance = event.getReduction(Reduction.INNATE_RESISTANCE)
         )
 
-        //vitima.entityData.set(DummyEntity.DAMAGE_DATA,damaData)
+        // Ranking: somente golpes de jogadores em dummies com módulo de treino instalado
+        val attackerPlayer = event.source.entity as? ServerPlayer
+        vitima.lastAttackerUuid = attackerPlayer?.uuid
+        vitima.lastAttackerName = attackerPlayer?.gameProfile?.name
+        if (attackerPlayer != null && vitima.hasTrainingModule()) {
+            DummyRankData.get(attackerPlayer.level().server)
+                .recordHit(attackerPlayer.uuid, attackerPlayer.gameProfile.name, event.inflictedDamage)
+        }
+
         vitima.onCustomDamageReceived(newDamaData)
-        DummyManagementBlockEntity.handleDummyDamage(vitima, event.newDamage)
+        DummyManagementBlockEntity.handleDummyDamage(vitima, event.inflictedDamage)
 
         hitAnimation(event)
-
-
-
     }
 
     @SubscribeEvent
-    fun onCrit(event : CriticalHitEvent){
-
+    fun onCrit(event: CriticalHitEvent) {
         if (event.entity.level().isClientSide) return
 
-        //val player : Player = event.entity
-        val vitima : DummyEntity = event.target as? DummyEntity ?: return
+        val vitima: DummyEntity = event.target as? DummyEntity ?: return
         vitima.damageDataOld = vitima.damageData
 
         vitima.preDamageData = DamageData(
@@ -70,20 +72,16 @@ object ModEvents {
             isCriticalHit = event.isCriticalHit,
             isVanillaCritical = event.isVanillaCritical
         )
-
     }
 
-
-    private fun hitAnimation(event: LivingDamageEvent.Post){
-
-        val dummy : DummyEntity = event.entity as? DummyEntity ?: return
+    private fun hitAnimation(event: LivingDamageEvent.Post) {
+        val dummy: DummyEntity = event.entity as? DummyEntity ?: return
         val attacker = event.source.entity
         if (attacker != null) {
-
-            if(attacker.weaponItem?.item is MaceItem){
-                dummy.maceAnimation.maceDamage = event.newDamage
+            if (attacker.weaponItem?.item is MaceItem) {
+                dummy.maceAnimation.maceDamage = event.inflictedDamage
                 dummy.maceAnimation.trigger()
-            }else{
+            } else {
                 dummy.maceAnimation.maceDamage = -1.0f
                 dummy.maceAnimation.trigger()
             }
@@ -94,13 +92,12 @@ object ModEvents {
             val relativeAngle = Mth.wrapDegrees(attackAngle - dummy.yRot)
             val rad = Math.toRadians(relativeAngle)
 
-            dummy.hitAnimation.hitPitch = -Mth.cos(rad.toFloat())
-            dummy.hitAnimation.hitRoll = Mth.sin(rad.toFloat())
+            dummy.hitAnimation.hitPitch = -kotlin.math.cos(rad).toFloat()
+            dummy.hitAnimation.hitRoll = kotlin.math.sin(rad).toFloat()
         } else {
             dummy.hitAnimation.hitPitch = -1.0f
             dummy.hitAnimation.hitRoll = 0.0f
         }
         dummy.hitAnimation.trigger()
     }
-
 }

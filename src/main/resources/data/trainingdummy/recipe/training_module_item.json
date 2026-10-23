@@ -7,27 +7,13 @@
     "hBh"
   ],
   "key": {
-    "#": {
-      "item": "minecraft:light_weighted_pressure_plate"
-    },
-    "H": {
-      "item": "minecraft:heavy_weighted_pressure_plate"
-    },
-    "C": {
-      "item": "minecraft:comparator"
-    },
-    "O": {
-      "item": "minecraft:observer"
-    },
-    "T": {
-      "item": "minecraft:target"
-    },
-    "h": {
-      "item": "minecraft:hay_block"
-    },
-    "B": {
-      "tag": "minecraft:buttons"
-    }
+    "#": "minecraft:light_weighted_pressure_plate",
+    "H": "minecraft:heavy_weighted_pressure_plate",
+    "C": "minecraft:comparator",
+    "O": "minecraft:observer",
+    "T": "minecraft:target",
+    "h": "minecraft:hay_block",
+    "B": "#minecraft:buttons"
   },
   "result": {
     "id": "trainingdummy:training_module_item"

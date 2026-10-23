@@ -12,6 +12,7 @@ import net.minecraft.util.Mth
 import net.minecraft.world.InteractionHand
 import net.minecraft.world.InteractionResult
 import net.minecraft.world.entity.Entity
+import net.minecraft.world.entity.EntitySpawnReason
 import net.minecraft.world.entity.LivingEntity
 import net.minecraft.world.entity.player.Player
 import net.minecraft.world.item.Item
@@ -24,24 +25,6 @@ import net.minecraft.world.level.gameevent.GameEvent
 import net.minecraft.world.phys.Vec3
 
 class TrainingDummySpawnItem(properties: Properties) : Item(properties) {
-
-
-
-
-    /*
-    private fun updateDummyEquipmentOLD(dummy: DummyEntity, stack: ItemStack) {
-        val data = stack.get(ModDataComponents.DUMMY_DATA.get()) ?: DummyData()
-
-        dummy.setItemSlot(EquipmentSlot.FEET, data.armor[0])
-        dummy.setItemSlot(EquipmentSlot.LEGS, data.armor[1])
-        dummy.setItemSlot(EquipmentSlot.CHEST, data.armor[2])
-        dummy.setItemSlot(EquipmentSlot.HEAD, data.armor[3])
-
-        dummy.setItemSlot(EquipmentSlot.MAINHAND, data.hands[0])
-        dummy.setItemSlot(EquipmentSlot.OFFHAND, data.hands[1])
-    }
-
-     */
 
     override fun interactLivingEntity(
         stack: ItemStack,
@@ -57,50 +40,36 @@ class TrainingDummySpawnItem(properties: Properties) : Item(properties) {
                 return InteractionResult.SUCCESS
             }
 
-            val profilePlayer : ResolvableProfile? = interactionTarget.profilePlayer
+            val profilePlayer: ResolvableProfile? = interactionTarget.profilePlayer
+            val customName = interactionTarget.customName
             val itemsListDummy = NonNullList.withSize(interactionTarget.dummyInventory.slots, ItemStack.EMPTY)
             for (i in 0 until interactionTarget.dummyInventory.slots) {
-                itemsListDummy[i] = interactionTarget.dummyInventory.getStackInSlot(i)
+                itemsListDummy[i] = interactionTarget.dummyInventory.getStackInSlot(i).copy()
             }
 
             interactionTarget.updateDummyEquipmentUsingAnItem(stack)
-            interactionTarget.profilePlayer = stack.get(DataComponents.PROFILE)
+            val stackCustomName = stack.get(DataComponents.CUSTOM_NAME)
+            if (stackCustomName != null) {
+                interactionTarget.customName = stackCustomName
+            } else {
+                interactionTarget.customName = null
+            }
+            stack.get(DataComponents.PROFILE)?.let {
+                interactionTarget.profilePlayer = it
+            }
 
-            // Salva o inventário inteiro direto no ItemStack
-            stack.set(DataComponents.PROFILE,profilePlayer)
+            // Salva o inventário, perfil e nome customizado direto no ItemStack
+            if (profilePlayer != null) {
+                stack.set(DataComponents.PROFILE, profilePlayer)
+            } else {
+                stack.remove(DataComponents.PROFILE)
+            }
+            if (customName != null) {
+                stack.set(DataComponents.CUSTOM_NAME, customName)
+            } else {
+                stack.remove(DataComponents.CUSTOM_NAME)
+            }
             stack.set(DataComponents.CONTAINER, ItemContainerContents.fromItems(itemsListDummy))
-
-
-            /*
-            val dataInItem = stack.get(ModDataComponents.DUMMY_DATA.get()) ?: DummyData()
-            val currentEntityArmor = NonNullList.withSize(4, ItemStack.EMPTY).apply {
-                this[0] = interactionTarget.getItemBySlot(EquipmentSlot.FEET).copy()
-                this[1] = interactionTarget.getItemBySlot(EquipmentSlot.LEGS).copy()
-                this[2] = interactionTarget.getItemBySlot(EquipmentSlot.CHEST).copy()
-                this[3] = interactionTarget.getItemBySlot(EquipmentSlot.HEAD).copy()
-            }
-
-            val currentEntityHands = NonNullList.withSize(2, ItemStack.EMPTY).apply {
-                this[0] = interactionTarget.getItemBySlot(EquipmentSlot.MAINHAND).copy()
-                this[1] = interactionTarget.getItemBySlot(EquipmentSlot.OFFHAND).copy()
-            }
-
-            interactionTarget.setItemSlot(EquipmentSlot.FEET, dataInItem.armor.getOrElse(0) { ItemStack.EMPTY }.copy())
-            interactionTarget.setItemSlot(EquipmentSlot.LEGS, dataInItem.armor.getOrElse(1) { ItemStack.EMPTY }.copy())
-            interactionTarget.setItemSlot(EquipmentSlot.CHEST, dataInItem.armor.getOrElse(2) { ItemStack.EMPTY }.copy())
-            interactionTarget.setItemSlot(EquipmentSlot.HEAD, dataInItem.armor.getOrElse(3) { ItemStack.EMPTY }.copy())
-
-            interactionTarget.setItemSlot(EquipmentSlot.MAINHAND, dataInItem.hands.getOrElse(0) { ItemStack.EMPTY }.copy())
-            interactionTarget.setItemSlot(EquipmentSlot.OFFHAND, dataInItem.hands.getOrElse(1) { ItemStack.EMPTY }.copy())
-
-            val newDummyData = DummyData(
-                armor = currentEntityArmor,
-                hands = currentEntityHands,
-            )
-
-            stack.set(ModDataComponents.DUMMY_DATA.get(), newDummyData)
-            */
-
 
             interactionTarget.playSound(
                 SoundEvents.ARMOR_EQUIP_GENERIC.value(),
@@ -137,15 +106,14 @@ class TrainingDummySpawnItem(properties: Properties) : Item(properties) {
 
                 val serverlevel = level
 
-                // Cria sua DummyEntityO
-                val dummy = ModEntities.DUMMY.get().create(serverlevel)
+                val dummy = ModEntities.DUMMY.get().create(serverlevel, EntitySpawnReason.SPAWN_ITEM_USE)
                     ?: return InteractionResult.FAIL
 
                 dummy.updateDummyEquipmentUsingAnItem(itemstack)
                 dummy.applyCompoundTagsFromItem(itemstack)
 
                 // Coloca na posição do bloco
-                dummy.moveTo(
+                dummy.snapTo(
                     blockpos.x + 0.5,
                     blockpos.y.toDouble(),
                     blockpos.z + 0.5,
@@ -163,12 +131,10 @@ class TrainingDummySpawnItem(properties: Properties) : Item(properties) {
                 dummy.yBodyRot = rotation
                 dummy.yHeadRot = rotation
 
-
                 // Adiciona no mundo
                 serverlevel.addFreshEntityWithPassengers(dummy)
-                level.broadcastEntityEvent(dummy,42)
+                level.broadcastEntityEvent(dummy, 42)
 
-                // Som (talvez criar um?)
                 level.playSound(
                     null as Player?,
                     dummy.x,
@@ -189,9 +155,7 @@ class TrainingDummySpawnItem(properties: Properties) : Item(properties) {
                 itemstack.shrink(1)
             }
 
-
-
-            return InteractionResult.sidedSuccess(level.isClientSide)
+            return InteractionResult.SUCCESS
 
         } else {
             return InteractionResult.FAIL

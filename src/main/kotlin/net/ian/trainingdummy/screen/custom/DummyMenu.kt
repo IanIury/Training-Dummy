@@ -1,6 +1,7 @@
 package net.ian.trainingdummy.screen.custom
 
 import net.ian.trainingdummy.entity.DummyEntity
+import net.ian.trainingdummy.entity.DummyInventory
 import net.ian.trainingdummy.item.ModItems
 import net.ian.trainingdummy.screen.ModMenuTypes
 import net.minecraft.network.FriendlyByteBuf
@@ -9,8 +10,6 @@ import net.minecraft.world.entity.player.Player
 import net.minecraft.world.inventory.AbstractContainerMenu
 import net.minecraft.world.inventory.Slot
 import net.minecraft.world.item.ItemStack
-import net.neoforged.neoforge.items.ItemStackHandler
-import net.neoforged.neoforge.items.SlotItemHandler
 
 class DummyMenu(
     containerId: Int,
@@ -25,31 +24,26 @@ class DummyMenu(
         playerInventory.player.level().getEntity(extraData.readInt()) as? DummyEntity
     )
 
+    private open class DummySlot(
+        private val dummyInv: DummyInventory,
+        slot: Int,
+        x: Int,
+        y: Int
+    ) : Slot(dummyInv, slot, x, y) {
+        override fun mayPlace(stack: ItemStack): Boolean = dummyInv.isItemValid(containerSlot, stack)
+        override fun getMaxStackSize(): Int = dummyInv.getSlotLimit(containerSlot)
+        override fun getMaxStackSize(stack: ItemStack): Int = minOf(getMaxStackSize(), stack.maxStackSize)
+    }
+
     init {
+        val inventory = dummy?.dummyInventory ?: DummyInventory(7)
 
-        if (dummy != null) {
-
-            for (i in 0 until 4) {
-                this.addSlot(SlotItemHandler(dummy.dummyInventory, i, 8, 8 + i * 18))
-            }
-            this.addSlot(trainingModuleSlot(dummy.dummyInventory))
-
-            this.addSlot(SlotItemHandler(dummy.dummyInventory, 5, 79, 62))
-            this.addSlot(SlotItemHandler(dummy.dummyInventory, 6, 98, 62))
-
-        }else {
-            // Fallback caso o Dummy seja nulo no cliente temporariamente
-            val dummyInventory = object : ItemStackHandler(7) {}
-            for (i in 0 until 4) {
-                this.addSlot(SlotItemHandler(dummyInventory, i, 8, 8 + i * 18))
-            }
-
-            this.addSlot(trainingModuleSlot(dummyInventory))
-
-            this.addSlot(SlotItemHandler(dummyInventory, 5, 79, 62))
-            this.addSlot(SlotItemHandler(dummyInventory, 6, 98, 62))
-
+        for (i in 0 until 4) {
+            this.addSlot(DummySlot(inventory, i, 8, 8 + i * 18))
         }
+        this.addSlot(trainingModuleSlot(inventory))
+        this.addSlot(DummySlot(inventory, 5, 79, 62))
+        this.addSlot(DummySlot(inventory, 6, 98, 62))
 
         // 3. Inventário do Jogador (3 linhas x 9 colunas)
         for (row in 0 until 3) {
@@ -65,7 +59,7 @@ class DummyMenu(
     }
 
     override fun stillValid(player: Player): Boolean {
-        val entity = dummy ?: return  false
+        val entity = dummy ?: return false
         return entity.isAlive &&
             player.level() === entity.level() &&
             player.distanceToSqr(entity) <= MAX_DUMMY_DISTANCE_SQUARED
@@ -73,7 +67,7 @@ class DummyMenu(
 
     companion object {
         private const val MAX_DUMMY_DISTANCE_SQUARED = 64.0
-        private const val DUMMY_SLOT_COUNT = 7 // 4 Armaduras + 1 Upgrade
+        private const val DUMMY_SLOT_COUNT = 7 // 4 Armaduras + 1 Upgrade + 2 Mãos
 
         private const val HOTBAR_SLOT_COUNT = 9
         private const val PLAYER_INVENTORY_ROW_COUNT = 3
@@ -83,7 +77,6 @@ class DummyMenu(
 
         private const val DUMMY_FIRST_SLOT_INDEX = 0
         private const val VANILLA_FIRST_SLOT_INDEX = DUMMY_FIRST_SLOT_INDEX + DUMMY_SLOT_COUNT
-
     }
 
     override fun quickMoveStack(player: Player, index: Int): ItemStack {
@@ -97,9 +90,7 @@ class DummyMenu(
             if (!moveItemStackTo(sourceStack, VANILLA_FIRST_SLOT_INDEX, VANILLA_FIRST_SLOT_INDEX + VANILLA_SLOT_COUNT, true)) {
                 return ItemStack.EMPTY
             }
-        }
-
-        else if (index in VANILLA_FIRST_SLOT_INDEX until (VANILLA_FIRST_SLOT_INDEX + VANILLA_SLOT_COUNT)) {
+        } else if (index in VANILLA_FIRST_SLOT_INDEX until (VANILLA_FIRST_SLOT_INDEX + VANILLA_SLOT_COUNT)) {
             if (!moveItemStackTo(sourceStack, DUMMY_FIRST_SLOT_INDEX, DUMMY_FIRST_SLOT_INDEX + DUMMY_SLOT_COUNT, false)) {
                 return ItemStack.EMPTY
             }
@@ -125,10 +116,9 @@ class DummyMenu(
         return dummy?.let { !it.dummyInventory.getStackInSlot(4).isEmpty } ?: false
     }
 
-    private fun trainingModuleSlot(inventory: ItemStackHandler): SlotItemHandler =
-        object : SlotItemHandler(inventory, 4, 152, 62) {
+    private fun trainingModuleSlot(inventory: DummyInventory): Slot =
+        object : DummySlot(inventory, 4, 152, 62) {
             override fun mayPlace(stack: ItemStack): Boolean =
                 stack.`is`(ModItems.TRAINING_MODULE_ITEM)
         }
-
 }
