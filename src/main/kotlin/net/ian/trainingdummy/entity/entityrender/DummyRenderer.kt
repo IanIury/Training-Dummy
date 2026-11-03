@@ -3,6 +3,13 @@ package net.ian.trainingdummy.entity.entityrender
 import com.mojang.blaze3d.vertex.PoseStack
 import com.mojang.blaze3d.vertex.VertexConsumer
 import org.joml.Matrix4f
+import org.joml.Vector3f
+import net.minecraft.client.Minecraft
+import net.minecraft.core.Holder
+import net.minecraft.world.effect.MobEffect
+import net.minecraft.world.effect.MobEffectInstance
+import net.minecraft.network.chat.CommonComponents
+import net.minecraft.util.StringUtil
 import dev.ian.worldpanel.FloatingText
 import dev.ian.worldpanel.FloatingWindow
 import dev.ian.worldpanel.TextRenderMode
@@ -66,6 +73,48 @@ data class DummyWindowProjection(
     val rightX: Double,
     val rightZ: Double
 )
+
+data class DummyRenderState(
+    var effectsWindow: Boolean = false,
+    var faceCamera: Boolean = false
+)
+
+class MobEffectIconElement(
+    private val effect: Holder<MobEffect>,
+    private val size: Float = 14f
+) : WindowElement {
+    override val isIcon: Boolean get() = true
+    private val iconSize = size.coerceAtLeast(1f)
+
+    override fun getWidth(): Float = iconSize
+    override fun getHeight(): Float = iconSize
+
+    override fun render(
+        poseStack: PoseStack,
+        buffer: MultiBufferSource,
+        x: Float,
+        y: Float,
+        availableWidth: Float,
+        packedLight: Int
+    ) {
+        val sprite = Minecraft.getInstance().mobEffectTextures.get(effect) ?: return
+        val builder = buffer.getBuffer(RenderType.entityCutoutNoCull(sprite.atlasLocation()))
+        val matrix = poseStack.last().pose()
+        val right = x + iconSize
+        val bottom = y + iconSize
+
+        val u0 = sprite.u0
+        val u1 = sprite.u1
+        val v0 = sprite.v0
+        val v1 = sprite.v1
+
+        builder.addVertex(matrix, x, y, 0.05f).setColor(1f, 1f, 1f, 1f).setUv(u0, v0).setOverlay(net.minecraft.client.renderer.texture.OverlayTexture.NO_OVERLAY).setLight(packedLight).setNormal(0f, 0f, 1f)
+        builder.addVertex(matrix, x, bottom, 0.05f).setColor(1f, 1f, 1f, 1f).setUv(u0, v1).setOverlay(net.minecraft.client.renderer.texture.OverlayTexture.NO_OVERLAY).setLight(packedLight).setNormal(0f, 0f, 1f)
+        builder.addVertex(matrix, right, bottom, 0.05f).setColor(1f, 1f, 1f, 1f).setUv(u1, v1).setOverlay(net.minecraft.client.renderer.texture.OverlayTexture.NO_OVERLAY).setLight(packedLight).setNormal(0f, 0f, 1f)
+        builder.addVertex(matrix, right, y, 0.05f).setColor(1f, 1f, 1f, 1f).setUv(u1, v0).setOverlay(net.minecraft.client.renderer.texture.OverlayTexture.NO_OVERLAY).setLight(packedLight).setNormal(0f, 0f, 1f)
+    }
+}
+
 
 class DummyRenderer(context: EntityRendererProvider.Context) : HumanoidMobRenderer<DummyEntity, DummyModel>(
     context,
@@ -292,7 +341,14 @@ class DummyRenderer(context: EntityRendererProvider.Context) : HumanoidMobRender
         super.render(entity, entityYaw, partialTicks, poseStack, buffer, packedLight)
 
         if (!DisplayDummyClientUtil.isRenderingHandHologram) {
-            renderFloatingWindowModo(entity, partialTicks, poseStack, buffer, packedLight)
+            val camera = Minecraft.getInstance().gameRenderer.mainCamera
+            val cameraRight = Vector3f(1f, 0f, 0f).rotate(camera.rotation())
+            val projection = if (entity.faceCamera) {
+                DummyWindowProjection(0.0, 2.0, 0.0, cameraRight.x.toDouble(), cameraRight.z.toDouble())
+            } else {
+                null
+            }
+            renderFloatingWindowModo(entity, partialTicks, poseStack, buffer, packedLight, projection)
         }
 
     }
@@ -309,8 +365,164 @@ class DummyRenderer(context: EntityRendererProvider.Context) : HumanoidMobRender
         return camera.isVisible(expandedBox)
     }
 
+    override fun shouldShowName(entity: DummyEntity): Boolean = false
+
 
     companion object {
+
+        private fun calculateEffectsWindowBaseY(
+            entity: DummyEntity,
+            isProjection: Boolean,
+            fromBlockEntity: Boolean = false
+        ): Double {
+            val modoAtual = entity.trainingModuleConfig.trainingModo
+            val hasActiveSideWindow = (fromBlockEntity || modoAtual == TrainingModos.DPS || entity.displayTicks > 0)
+            val baseHeadY = if (isProjection) 0.40 else 2.40
+
+            if (!hasActiveSideWindow) {
+                return baseHeadY
+            }
+
+            return when (modoAtual) {
+                TrainingModos.DEFAULT -> {
+                    val damageData = entity.damageData
+                    var estimatedHeightPx = 24f
+                    if (entity.detailedDamageWindow) estimatedHeightPx += 26f
+                    if (damageData.isCriticalHit) estimatedHeightPx += 12f
+                    if (damageData.isReductions()) {
+                        estimatedHeightPx += 6f // margem do separador
+                        if (damageData.armor > 0f) estimatedHeightPx += 11f
+                        if (damageData.enchantments > 0f) estimatedHeightPx += 11f
+                        if (damageData.mobEffects > 0f) estimatedHeightPx += 11f
+                        if (damageData.absorption > 0f) estimatedHeightPx += 11f
+                        if (damageData.innateResistance > 0f) estimatedHeightPx += 11f
+                        if (damageData.invulnerability > 0f) estimatedHeightPx += 11f
+                    }
+                    // A janela lateral é CENTER em Y = 2.0
+                    val halfHeightMeters = (estimatedHeightPx * 0.025f) / 2.0
+                    val topMeters = 2.0 + halfHeightMeters
+                    val targetY = (topMeters + 0.12 - 0.30).coerceAtLeast(baseHeadY)
+                    if (isProjection) (targetY - 2.0 - 0.15).coerceAtLeast(baseHeadY) else targetY
+                }
+
+                TrainingModos.COMPARISON -> {
+                    // No modo de comparação, a janela central de resultado (diferença) fica em Y = 2.5 (sem projeção)
+                    // ou projectionOffsetY = 0.65 (com projeção). A janela de efeitos fica posicionada logo acima.
+                    val targetY = 3.05
+                    if (isProjection) 1.15 else targetY
+                }
+
+                TrainingModos.DPS -> {
+                    val estimatedHeightPx = when (entity.dpsTestState) {
+                        DummyEntity.DPS_STATE_COOLDOWN -> 42f
+                        DummyEntity.DPS_STATE_MEASURING -> 32f
+                        else -> 18f
+                    }
+                    val halfHeightMeters = (estimatedHeightPx * 0.025f) / 2.0
+                    val topMeters = 2.0 + halfHeightMeters
+                    val targetY = (topMeters + 0.10 - 0.30).coerceAtLeast(baseHeadY)
+                    if (isProjection) (targetY - 2.0 - 0.15).coerceAtLeast(baseHeadY) else targetY
+                }
+
+                TrainingModos.ACCUMULATED -> {
+                    val halfHeightMeters = (30f * 0.025f) / 2.0
+                    val topMeters = 2.0 + halfHeightMeters
+                    val targetY = (topMeters + 0.10 - 0.30).coerceAtLeast(baseHeadY)
+                    if (isProjection) (targetY - 2.0 - 0.15).coerceAtLeast(baseHeadY) else targetY
+                }
+            }
+        }
+
+        fun renderEffectsWindow(
+            entity: DummyEntity,
+            poseStack: PoseStack,
+            buffer: MultiBufferSource,
+            packedLight: Int,
+            projection: DummyWindowProjection? = null,
+            fromBlockEntity: Boolean = false
+        ) {
+            val activeEffects = entity.activeEffects
+            if (activeEffects.isEmpty()) return
+
+            val window = FloatingWindow.Builder()
+            if (projection == null) {
+                val offsetY = calculateEffectsWindowBaseY(entity, isProjection = false, fromBlockEntity = fromBlockEntity)
+                window.attachToEntityRotation(entity).setOffset(0.0, offsetY, 0.0)
+            } else {
+                val projectionOffsetY = calculateEffectsWindowBaseY(entity, isProjection = true, fromBlockEntity = fromBlockEntity)
+                window.setFaceCamera(true)
+                    .setOffset(projection.x, projection.y + projectionOffsetY, projection.z)
+            }
+
+            applyWindowShape(window, entity)
+            window.setAlignment(WindowAlignment.BOTTOM_CENTER)
+                .setScale(0.013f)
+                .setPadding(3f)
+                .setContentFit(FloatingWindow.ContentFit.EXPAND_TO_CONTENT)
+                .setBorder(
+                    WindowColor.AnimatedGradient(
+                        argbStart = 0xFFC5A5FB,
+                        argbEnd = 0xFF5700AC,
+                        speed = 1.2f,
+                        scale = 0.8f
+                    ),
+                    width = 0.75f
+                )
+                .setBackground(
+                    WindowColor.Gradient(
+                        argbStart = 0xF0181C2A,
+                        argbEnd = 0xF02B233D
+                    )
+                )
+                .addText(
+                    Component.translatable("message.trainingdummy.effects_title"),
+                    color = 0xFF9BE7FF.toInt(),
+                    shadow = true,
+                    alignment = WindowElement.Text.TextAlignment.CENTER,
+                    textScale = 0.9f
+                )
+                .addSeparator(color = modeWindowSeparator(), thickness = 0.5f, margin = 2f)
+
+            if (!entity.detailedDamageWindow) {
+                // Modo Compacto: exibe APENAS os ícones em fileiras horizontais de até 5
+                val chunks = activeEffects.chunked(5)
+                for (chunk in chunks) {
+                    val icons = chunk.map { MobEffectIconElement(it.effect, 14f) }
+                    window.addRow(*icons.toTypedArray(), spacing = 3f, alignment = WindowElement.Text.TextAlignment.CENTER)
+                }
+            } else {
+                // Modo Detalhado: Ícone (12px) + Nome + Nível (se amplificado) + Duração (∞ se infinito)
+                for (instance in activeEffects) {
+                    val effect = instance.effect
+                    val nameComponent = Component.translatable(effect.value().descriptionId)
+                    val textComponent = Component.empty().append(nameComponent)
+                    if (instance.amplifier > 0) {
+                        textComponent.append(CommonComponents.SPACE)
+                            .append(Component.translatable("enchantment.level.${instance.amplifier + 1}"))
+                    }
+                    val durationStr = if (instance.isInfiniteDuration) "∞" else StringUtil.formatTickDuration(instance.duration, 20f)
+                    textComponent.append(Component.literal(" ($durationStr)"))
+
+                    val effectColor = (effect.value().color or 0xFF000000.toInt())
+                    val textElement = WindowElement.Text(
+                        text = textComponent,
+                        color = WindowColor.Solid(effectColor.toLong() and 0xFFFFFFFFL),
+                        shadow = true,
+                        textScale = 0.95f,
+                        alignment = WindowElement.Text.TextAlignment.LEFT
+                    )
+                    window.addRow(
+                        MobEffectIconElement(effect, 12f),
+                        textElement,
+                        spacing = 3f,
+                        alignment = WindowElement.Text.TextAlignment.LEFT
+                    )
+                }
+            }
+
+            window.build().render(poseStack, buffer, packedLight)
+        }
+
 
         fun windowDefault3(window: FloatingWindow.Builder, entity: DummyEntity) {
             window
@@ -372,13 +584,16 @@ class DummyRenderer(context: EntityRendererProvider.Context) : HumanoidMobRender
             poseStack: PoseStack,
             buffer: MultiBufferSource,
             packedLight: Int,
-            projection: DummyWindowProjection? = null
-
+            projection: DummyWindowProjection? = null,
+            fromBlockEntity: Boolean = false
         ) {
 
+            if (entity.effectsWindow && entity.activeEffects.isNotEmpty()) {
+                renderEffectsWindow(entity, poseStack, buffer, packedLight, projection, fromBlockEntity)
+            }
 
             val modoAtual = entity.trainingModuleConfig.trainingModo
-            if (projection == null && modoAtual != TrainingModos.DPS && entity.displayTicks <= 0) return
+            if (!fromBlockEntity && modoAtual != TrainingModos.DPS && entity.displayTicks <= 0) return
 
             val damageData = entity.damageData
             val damageDataOld = entity.damageDataOld
@@ -407,7 +622,11 @@ class DummyRenderer(context: EntityRendererProvider.Context) : HumanoidMobRender
                         window.attachToEntityRotation(entity).setOffset(0.9, 2.0, 0.0)
                     } else {
                         window.setFaceCamera(true)
-                            .setOffset(projection.x, projection.y, projection.z)
+                            .setOffset(
+                                projection.x + 0.9 * projection.rightX,
+                                projection.y,
+                                projection.z + 0.9 * projection.rightZ
+                            )
                     }
                     applyWindowShape(window, entity)
                     window
@@ -541,7 +760,9 @@ class DummyRenderer(context: EntityRendererProvider.Context) : HumanoidMobRender
                         window,
                         entity,
                         Component.translatable("message.trainingdummy.accumulated_title"),
-                        projection = projection
+                        offsetX = 0.8,
+                        projection = projection,
+                        projectionOffsetX = 0.8
                     )
                     window.addSeparator(color = modeWindowSeparator(), thickness = 0.5f, margin = 2f)
                         .addText(
@@ -557,6 +778,7 @@ class DummyRenderer(context: EntityRendererProvider.Context) : HumanoidMobRender
                 }
 
                 TrainingModos.COMPARISON -> {
+                    val compOffsetX = if (fromBlockEntity) 0.45 else 0.8
                     buildComparisonPanel(
                         window,
                         entity,
@@ -565,7 +787,7 @@ class DummyRenderer(context: EntityRendererProvider.Context) : HumanoidMobRender
                         damageDataOld.newDamage,
                         offsetX = 0.8,
                         projection = projection,
-                        projectionOffsetX = 0.35
+                        projectionOffsetX = compOffsetX
                     )
 
                     val window2 = FloatingWindow.Builder()
@@ -577,7 +799,7 @@ class DummyRenderer(context: EntityRendererProvider.Context) : HumanoidMobRender
                         damageData.newDamage,
                         offsetX = -0.8,
                         projection = projection,
-                        projectionOffsetX = -0.35
+                        projectionOffsetX = -compOffsetX
                     )
                     window2.build().render(poseStack, buffer, packedLight)
 
@@ -602,7 +824,7 @@ class DummyRenderer(context: EntityRendererProvider.Context) : HumanoidMobRender
                         width = 28f,
                         height = 22f,
                         projection = projection,
-                        projectionOffsetY = 0.60
+                        projectionOffsetY = 0.65
                     )
                     differenceWindow.addSeparator(color = modeWindowSeparator(), thickness = 0.5f, margin = 2f)
                         .addText(
@@ -674,7 +896,11 @@ class DummyRenderer(context: EntityRendererProvider.Context) : HumanoidMobRender
                 window.attachToEntityRotation(entity).setOffset(0.9, 2.0, 0.0)
             } else {
                 window.setFaceCamera(true)
-                    .setOffset(projection.x, projection.y, projection.z)
+                    .setOffset(
+                        projection.x + 0.9 * projection.rightX,
+                        projection.y,
+                        projection.z + 0.9 * projection.rightZ
+                    )
             }
 
             applyWindowShape(window, entity)
@@ -892,7 +1118,7 @@ class DummyRenderer(context: EntityRendererProvider.Context) : HumanoidMobRender
             width: Float = 30f,
             height: Float = 30f,
             projection: DummyWindowProjection? = null,
-            projectionOffsetX: Double = 0.0,
+            projectionOffsetX: Double = offsetX,
             projectionOffsetY: Double = 0.0
         ) {
             if (projection == null) {

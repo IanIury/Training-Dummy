@@ -125,7 +125,8 @@ class DisplayDummyBlockEntityRenderer(context: BlockEntityRendererProvider.Conte
             poseStack,
             buffer,
             packedLight,
-            projection
+            projection,
+            fromBlockEntity = true
         )
     }
 

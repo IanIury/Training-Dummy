@@ -8,6 +8,9 @@ import net.ian.trainingdummy.init.components.ModDataComponents
 import net.ian.trainingdummy.init.serializers.ModDataSerializersRegistry
 import net.ian.trainingdummy.item.ModCreativeModelTabs
 import net.ian.trainingdummy.item.ModItems
+import net.ian.trainingdummy.network.ServerboundSetEffectsWindowPayload
+import net.ian.trainingdummy.network.ServerboundClearEffectsPayload
+import net.ian.trainingdummy.network.ServerboundSetFaceCameraPayload
 import net.ian.trainingdummy.network.ServerboundChangeModePayload
 import net.ian.trainingdummy.network.ServerboundDummyManagementActionPayload
 import net.ian.trainingdummy.network.ClientboundRanksPayload
@@ -84,6 +87,10 @@ object TrainingDummy {
     }
 
     @SubscribeEvent
+    fun registerPayloads(event: RegisterPayloadHandlersEvent) {
+        register(event)
+    }
+
     fun register(event: RegisterPayloadHandlersEvent) {
         val registrar = event.registrar("1.0.0")
 
@@ -116,6 +123,21 @@ object TrainingDummy {
             ClientboundRanksPayload.TYPE,
             ClientboundRanksPayload.STREAM_CODEC,
             ClientboundRanksPayload::handle
+        )
+        registrar.playToServer(
+            ServerboundSetEffectsWindowPayload.TYPE,
+            ServerboundSetEffectsWindowPayload.STREAM_CODEC,
+            ServerboundSetEffectsWindowPayload::handle
+        )
+        registrar.playToServer(
+            ServerboundClearEffectsPayload.TYPE,
+            ServerboundClearEffectsPayload.STREAM_CODEC,
+            ServerboundClearEffectsPayload::handle
+        )
+        registrar.playToServer(
+            ServerboundSetFaceCameraPayload.TYPE,
+            ServerboundSetFaceCameraPayload.STREAM_CODEC,
+            ServerboundSetFaceCameraPayload::handle
         )
     }
 

@@ -14,6 +14,9 @@ import net.ian.trainingdummy.item.ModItems
 import net.ian.trainingdummy.item.custom.DisplayDummyBlockItem
 import net.ian.trainingdummy.item.custom.TrainingModuleItem
 import net.ian.trainingdummy.screen.custom.DummyMenu
+import net.minecraft.world.effect.MobEffectInstance
+import net.minecraft.network.protocol.game.ClientboundUpdateMobEffectPacket
+import net.minecraft.network.protocol.game.ClientboundRemoveMobEffectPacket
 import net.minecraft.core.NonNullList
 import net.minecraft.core.component.DataComponents
 import net.minecraft.nbt.CompoundTag
@@ -88,6 +91,14 @@ open class DummyEntity(
     var detailedDamageWindow: Boolean
         get() = entityData.get(DETAILED_DAMAGE_WINDOW)
         set(value) = entityData.set(DETAILED_DAMAGE_WINDOW, value)
+
+    var effectsWindow: Boolean
+        get() = entityData.get(EFFECTS_WINDOW)
+        set(value) = entityData.set(EFFECTS_WINDOW, value)
+
+    var faceCamera: Boolean
+        get() = entityData.get(FACE_CAMERA)
+        set(value) = entityData.set(FACE_CAMERA, value)
 
     /** Formato geométrico da janela flutuante (sincronizado com o cliente e salvo no NBT). */
     var windowShape: WindowShapeType
@@ -168,6 +179,8 @@ open class DummyEntity(
         builder.define(DPS_HIGHEST_HIT, 0f)
         builder.define(DETAILED_DAMAGE_WINDOW, false)
         builder.define(WINDOW_SHAPE, WindowShapeType.DEFAULT.ordinal)
+        builder.define(EFFECTS_WINDOW, false)
+        builder.define(FACE_CAMERA, false)
 
     }
 
@@ -240,6 +253,52 @@ open class DummyEntity(
         } else {
             super.handleEntityEvent(id)
         }
+    }
+
+
+    override fun onEffectAdded(effect: MobEffectInstance, entity: Entity?) {
+        super.onEffectAdded(effect, entity)
+        if (!level().isClientSide) {
+            (level() as? ServerLevel)?.chunkSource?.broadcast(this, ClientboundUpdateMobEffectPacket(this.id, effect, false))
+        }
+    }
+
+    override fun onEffectUpdated(effect: MobEffectInstance, forced: Boolean, entity: Entity?) {
+        super.onEffectUpdated(effect, forced, entity)
+        if (!level().isClientSide) {
+            (level() as? ServerLevel)?.chunkSource?.broadcast(this, ClientboundUpdateMobEffectPacket(this.id, effect, false))
+        }
+    }
+
+    override fun onEffectRemoved(effect: MobEffectInstance) {
+        super.onEffectRemoved(effect)
+        if (!level().isClientSide) {
+            (level() as? ServerLevel)?.chunkSource?.broadcast(this, ClientboundRemoveMobEffectPacket(this.id, effect.effect))
+        }
+    }
+
+    fun onEffectsRemoved(effects: MutableCollection<MobEffectInstance>) {
+        if (!level().isClientSide) {
+            val serverLevel = level() as? ServerLevel ?: return
+            for (effect in effects) {
+                serverLevel.chunkSource.broadcast(this, ClientboundRemoveMobEffectPacket(this.id, effect.effect))
+            }
+        }
+    }
+
+    override fun startSeenByPlayer(player: ServerPlayer) {
+        super.startSeenByPlayer(player)
+        for (effect in activeEffects) {
+            player.connection.send(ClientboundUpdateMobEffectPacket(this.id, effect, false))
+        }
+    }
+
+    fun clearAllEffects(): Boolean {
+        val removed = removeAllEffects()
+        if (removed) {
+            playSound(SoundEvents.GENERIC_DRINK, 0.8f, 1.0f)
+        }
+        return removed
     }
 
     override fun getHurtSound(damageSource: DamageSource): SoundEvent = SoundEvents.ARMOR_STAND_HIT
@@ -495,6 +554,9 @@ open class DummyEntity(
 
         if (!level().isClientSide) {
             if (player is ServerPlayer) {
+                for (effect in activeEffects) {
+                    player.connection.send(ClientboundUpdateMobEffectPacket(this.id, effect, false))
+                }
                 player.openMenu(
                     SimpleMenuProvider(
                         { containerId, playerInventory, _ ->
@@ -755,6 +817,8 @@ open class DummyEntity(
         compoundTag.put(DUMMY_INVENTORY_TAG, dummyInventory.serializeNBT(level().registryAccess()))
         compoundTag.putBoolean(DETAILED_DAMAGE_WINDOW_TAG, detailedDamageWindow)
         compoundTag.putInt(WINDOW_SHAPE_TAG, windowShape.ordinal)
+        compoundTag.putBoolean(EFFECTS_WINDOW_TAG, effectsWindow)
+        compoundTag.putBoolean(FACE_CAMERA_TAG, faceCamera)
 
         val registryContext = registryAccess().createSerializationContext(NbtOps.INSTANCE)
 
@@ -773,6 +837,8 @@ open class DummyEntity(
     override fun readAdditionalSaveData(compoundTag: CompoundTag) {
         super.readAdditionalSaveData(compoundTag)
         detailedDamageWindow = compoundTag.getBoolean(DETAILED_DAMAGE_WINDOW_TAG)
+        effectsWindow = compoundTag.getBoolean(EFFECTS_WINDOW_TAG)
+        faceCamera = compoundTag.getBoolean(FACE_CAMERA_TAG)
         windowShape = if (compoundTag.contains(WINDOW_SHAPE_TAG)) {
             WindowShapeType.byId(compoundTag.getInt(WINDOW_SHAPE_TAG))
         } else {
@@ -894,6 +960,10 @@ open class DummyEntity(
 
         val WINDOW_SHAPE: EntityDataAccessor<Int> =
             SynchedEntityData.defineId(DummyEntity::class.java, EntityDataSerializers.INT)
+        val EFFECTS_WINDOW: EntityDataAccessor<Boolean> =
+            SynchedEntityData.defineId(DummyEntity::class.java, EntityDataSerializers.BOOLEAN)
+        val FACE_CAMERA: EntityDataAccessor<Boolean> =
+            SynchedEntityData.defineId(DummyEntity::class.java, EntityDataSerializers.BOOLEAN)
 
 
         private const val HEAD_INVENTORY_SLOT = 0
@@ -906,6 +976,8 @@ open class DummyEntity(
         private const val DUMMY_INVENTORY_TAG = "trainingdummy:DummyInventory"
         private const val DETAILED_DAMAGE_WINDOW_TAG = "trainingdummy:DetailedDamageWindow"
         private const val WINDOW_SHAPE_TAG = "trainingdummy:WindowShape"
+        private const val EFFECTS_WINDOW_TAG = "trainingdummy:EffectsWindow"
+        private const val FACE_CAMERA_TAG = "trainingdummy:FaceCamera"
         private const val PROFILE_TAG = "trainingdummy:ProfilePlayer"
         private const val LEGACY_DUMMY_INVENTORY_TAG = "DummyInventory"
         private const val LEGACY_PROFILE_TAG = "ProfilePlayer"
