@@ -40,6 +40,8 @@ class DummyRenderState : HumanoidRenderState() {
     var trainingMode: TrainingModos = TrainingModos.DEFAULT
     var windowShape: WindowShapeType = WindowShapeType.ROUNDED
     var detailedDamage: Boolean = false
+    var effectsWindow: Boolean = false
+    var faceCamera: Boolean = false
     var dps: Float = 0f
     var maxDamage: Float = 0f
     var totalDamage: Float = 0f

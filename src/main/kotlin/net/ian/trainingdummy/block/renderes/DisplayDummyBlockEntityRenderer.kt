@@ -89,7 +89,9 @@ class DisplayDummyBlockEntityRenderer(context: BlockEntityRendererProvider.Conte
             offsetY,
             offsetZ,
             cameraRight.x.toDouble(),
-            cameraRight.z.toDouble()
+            cameraRight.z.toDouble(),
+            alwaysVisible = true,
+            isBlock = true
         )
 
         val entity = state.targetEntity ?: run {
@@ -114,6 +116,16 @@ class DisplayDummyBlockEntityRenderer(context: BlockEntityRendererProvider.Conte
             projection,
             state.partialTick
         )
+        if (entity.effectsWindow) {
+            DummyRenderer.renderEffectsWindow(
+                entity,
+                poseStack,
+                collector,
+                state.lightCoords,
+                projection,
+                state.partialTick
+            )
+        }
     }
 
     override fun shouldRenderOffScreen(): Boolean = true

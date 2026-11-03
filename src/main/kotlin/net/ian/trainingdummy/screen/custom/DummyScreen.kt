@@ -6,7 +6,10 @@ import net.ian.trainingdummy.init.enums.TrainingModos
 import net.ian.trainingdummy.init.enums.WindowShapeType
 import net.ian.trainingdummy.item.custom.TrainingModuleItem
 import net.ian.trainingdummy.network.ServerboundChangeModePayload
+import net.ian.trainingdummy.network.ServerboundClearEffectsPayload
 import net.ian.trainingdummy.network.ServerboundSetDetailedDamageWindowPayload
+import net.ian.trainingdummy.network.ServerboundSetEffectsWindowPayload
+import net.ian.trainingdummy.network.ServerboundSetFaceCameraPayload
 import net.ian.trainingdummy.network.ServerboundSetWindowShapePayload
 import net.ian.trainingdummy.rank.RankCategory
 import net.minecraft.ChatFormatting
@@ -39,6 +42,16 @@ class DummyScreen(
     private lateinit var btnDetailedDamage: Button
     private lateinit var btnShape: Button
     private lateinit var btnRank: Button
+    private lateinit var btnEffects: Button
+    private lateinit var btnFaceCamera: Button
+
+    private var pendingEffects: Boolean? = null
+    private var pendingEffectsTicks = 0
+    private var effectsWindowEnabled = false
+
+    private var pendingFaceCamera: Boolean? = null
+    private var pendingFaceCameraTicks = 0
+    private var faceCameraEnabled = false
 
     private var lastMode: TrainingModos? = null
     private var pendingMode: TrainingModos? = null
@@ -150,6 +163,65 @@ class DummyScreen(
         )
         btnShape.active = menu.dummy != null
 
+        // Botão de efeitos (116, 44) à esquerda do botão de ranking
+        btnEffects = addRenderableWidget(
+            object : Button(
+                leftPos + EFFECTS_BUTTON_X,
+                topPos + EFFECTS_BUTTON_Y,
+                SLOT_SIZE,
+                SLOT_SIZE,
+                Component.empty(),
+                OnPress {
+                    setEffectsWindow(!(pendingEffects ?: menu.dummy?.effectsWindow ?: false))
+                },
+                CreateNarration { effectsTooltip(menu.dummy?.effectsWindow ?: false)[0].copy() }
+            ) {
+                override fun mouseClicked(event: MouseButtonEvent, fromTouch: Boolean): Boolean {
+                    if (active && visible && isMouseOver(event.x(), event.y())) {
+                        if (event.button() == 1 || event.hasShiftDown()) {
+                            playDownSound(Minecraft.getInstance().soundManager)
+                            clearEffects()
+                            return true
+                        }
+                    }
+                    return super.mouseClicked(event, fromTouch)
+                }
+
+                override fun extractContents(extractor: GuiGraphicsExtractor, mouseX: Int, mouseY: Int, partialTick: Float) {
+                    drawSlotButton(extractor, x, y, width, isHovered, active)
+                    if (effectsWindowEnabled) {
+                        extractor.outline(x + 1, y + 1, width - 2, height - 2, 0xFF4ADE80.toInt())
+                    }
+                    drawPotion(extractor, x + (width - 8) / 2, y + (height - 9) / 2, effectsWindowEnabled)
+                }
+            }
+        )
+        btnEffects.active = menu.dummy != null
+
+        // Botão de orientação da janela (116, 62) abaixo do botão de efeitos
+        btnFaceCamera = addRenderableWidget(
+            object : Button(
+                leftPos + FACE_CAMERA_BUTTON_X,
+                topPos + FACE_CAMERA_BUTTON_Y,
+                SLOT_SIZE,
+                SLOT_SIZE,
+                Component.empty(),
+                OnPress {
+                    setFaceCamera(!(pendingFaceCamera ?: menu.dummy?.faceCamera ?: false))
+                },
+                CreateNarration { faceCameraTooltip(menu.dummy?.faceCamera ?: false)[0].copy() }
+            ) {
+                override fun extractContents(extractor: GuiGraphicsExtractor, mouseX: Int, mouseY: Int, partialTick: Float) {
+                    drawSlotButton(extractor, x, y, width, isHovered, active)
+                    if (faceCameraEnabled) {
+                        extractor.outline(x + 1, y + 1, width - 2, height - 2, 0xFF38BDF8.toInt())
+                    }
+                    drawEye(extractor, x + (width - 10) / 2, y + (height - 7) / 2, faceCameraEnabled)
+                }
+            }
+        )
+        btnFaceCamera.active = menu.dummy != null
+
         // Botão do ranking alinhado acima do botão de formato e ao lado do botão de dano detalhado (134, 44)
         btnRank = addRenderableWidget(
             object : Button(
@@ -219,6 +291,48 @@ class DummyScreen(
         }
     }
 
+    private fun drawEye(g: GuiGraphicsExtractor, x: Int, y: Int, enabled: Boolean) {
+        val irisColor = if (enabled) 0xFF38BDF8.toInt() else 0xFF71717A.toInt()
+        val highlightColor = if (enabled) 0xFFFFFFFF.toInt() else 0xFFA1A1AA.toInt()
+        val outlineColor = 0xFF2A2A2A.toInt()
+        val scleraColor = if (enabled) 0xFFE0F2FE.toInt() else 0xFFD4D4D8.toInt()
+
+        for ((row, line) in EYE_PIXELS.withIndex()) {
+            for ((col, ch) in line.withIndex()) {
+                if (ch == '.') continue
+                val color = when (ch) {
+                    '#' -> if (row == 0 || row == 6 || col == 0 || col == 9) outlineColor else scleraColor
+                    '@' -> irisColor
+                    '+' -> highlightColor
+                    else -> outlineColor
+                }
+                g.fill(x + col + 1, y + row + 1, x + col + 2, y + row + 2, 0xFF18181B.toInt())
+                g.fill(x + col, y + row, x + col + 1, y + row + 1, color)
+            }
+        }
+    }
+
+    private fun drawPotion(g: GuiGraphicsExtractor, x: Int, y: Int, enabled: Boolean) {
+        val liquidColor = if (enabled) 0xFF4ADE80.toInt() else 0xFFC084FC.toInt()
+        val liquidHighlight = if (enabled) 0xFF86EFAC.toInt() else 0xFFE9D5FF.toInt()
+        val glassColor = 0xFFE0E7FF.toInt()
+        val corkColor = 0xFF92400E.toInt()
+
+        for ((row, line) in POTION_PIXELS.withIndex()) {
+            for ((col, ch) in line.withIndex()) {
+                if (ch == '.') continue
+                val color = when {
+                    row == 0 -> corkColor
+                    ch == '+' -> liquidHighlight
+                    row >= 4 -> liquidColor
+                    else -> glassColor
+                }
+                g.fill(x + col + 1, y + row + 1, x + col + 2, y + row + 2, 0xFF2A2A2A.toInt())
+                g.fill(x + col, y + row, x + col + 1, y + row + 1, color)
+            }
+        }
+    }
+
     private fun drawTrophy(g: GuiGraphicsExtractor, x: Int, y: Int) {
         for ((row, line) in TROPHY_PIXELS.withIndex()) {
             for ((col, ch) in line.withIndex()) {
@@ -264,6 +378,16 @@ class DummyScreen(
         }
 
         val hasDummy = menu.dummy != null
+        btnEffects.visible = hasDummy
+        if (hasDummy) {
+            updateEffectsButton()
+        }
+
+        btnFaceCamera.visible = hasDummy
+        if (hasDummy) {
+            updateFaceCameraButton()
+        }
+
         btnDetailedDamage.visible = hasDummy
         if (hasDummy) {
             updateDetailedDamageButton()
@@ -277,6 +401,73 @@ class DummyScreen(
         btnRank.visible = hasUpgrade
         btnRank.active = hasDummy
     }
+
+    private fun updateEffectsButton() {
+        val syncedValue = menu.dummy?.effectsWindow ?: false
+        val shownValue = pendingEffects?.let { pending ->
+            if (syncedValue == pending || ++pendingEffectsTicks >= EFFECTS_SYNC_TIMEOUT_TICKS) {
+                pendingEffects = null
+                pendingEffectsTicks = 0
+                syncedValue
+            } else {
+                pending
+            }
+        } ?: syncedValue
+        btnEffects.active = menu.dummy != null
+        effectsWindowEnabled = shownValue
+    }
+
+    private fun setEffectsWindow(enabled: Boolean) {
+        if (menu.dummy == null) return
+        pendingEffects = enabled
+        pendingEffectsTicks = 0
+        effectsWindowEnabled = enabled
+        ClientPacketDistributor.sendToServer(ServerboundSetEffectsWindowPayload(enabled))
+    }
+
+    private fun clearEffects() {
+        if (menu.dummy == null) return
+        ClientPacketDistributor.sendToServer(ServerboundClearEffectsPayload())
+    }
+
+    private fun effectsTooltip(enabled: Boolean): List<Component> = listOf(
+        Component.translatable(
+            "gui.trainingdummy.effects_window",
+            Component.translatable(if (enabled) "gui.trainingdummy.enabled" else "gui.trainingdummy.disabled")
+        ),
+        Component.translatable("gui.trainingdummy.effects_window.hint").withStyle(ChatFormatting.DARK_GRAY)
+    )
+
+    private fun updateFaceCameraButton() {
+        val syncedValue = menu.dummy?.faceCamera ?: false
+        val shownValue = pendingFaceCamera?.let { pending ->
+            if (syncedValue == pending || ++pendingFaceCameraTicks >= FACE_CAMERA_SYNC_TIMEOUT_TICKS) {
+                pendingFaceCamera = null
+                pendingFaceCameraTicks = 0
+                syncedValue
+            } else {
+                pending
+            }
+        } ?: syncedValue
+        btnFaceCamera.active = menu.dummy != null
+        faceCameraEnabled = shownValue
+    }
+
+    private fun setFaceCamera(enabled: Boolean) {
+        if (menu.dummy == null) return
+        pendingFaceCamera = enabled
+        pendingFaceCameraTicks = 0
+        faceCameraEnabled = enabled
+        ClientPacketDistributor.sendToServer(ServerboundSetFaceCameraPayload(enabled))
+    }
+
+    private fun faceCameraTooltip(enabled: Boolean): List<Component> = listOf(
+        Component.translatable(
+            "gui.trainingdummy.face_camera",
+            Component.translatable(if (enabled) "gui.trainingdummy.face_camera.camera" else "gui.trainingdummy.face_camera.fixed")
+        ),
+        Component.translatable("gui.trainingdummy.face_camera.hint").withStyle(ChatFormatting.DARK_GRAY)
+    )
 
     private fun updateDetailedDamageButton() {
         val syncedValue = menu.dummy?.detailedDamageWindow ?: false
@@ -384,6 +575,22 @@ class DummyScreen(
     override fun extractRenderState(extractor: GuiGraphicsExtractor, mouseX: Int, mouseY: Int, partialTick: Float) {
         super.extractRenderState(extractor, mouseX, mouseY, partialTick)
         renderTrainingModulePlaceholder(extractor)
+        if (btnEffects.visible && btnEffects.isHovered) {
+            extractor.setComponentTooltipForNextFrame(
+                font,
+                effectsTooltip(effectsWindowEnabled),
+                mouseX,
+                mouseY
+            )
+        }
+        if (btnFaceCamera.visible && btnFaceCamera.isHovered) {
+            extractor.setComponentTooltipForNextFrame(
+                font,
+                faceCameraTooltip(faceCameraEnabled),
+                mouseX,
+                mouseY
+            )
+        }
         if (btnDetailedDamage.isHovered) {
             extractor.setTooltipForNextFrame(
                 font,
@@ -436,6 +643,36 @@ class DummyScreen(
         private const val SHAPE_SYNC_TIMEOUT_TICKS = 10
         private const val TRAINING_MODULE_SLOT_INDEX = 4
         private const val SLOT_SIZE = 16
+
+        private const val EFFECTS_BUTTON_X = 116
+        private const val EFFECTS_BUTTON_Y = 44
+        private const val EFFECTS_SYNC_TIMEOUT_TICKS = 10
+
+        private const val FACE_CAMERA_BUTTON_X = 116
+        private const val FACE_CAMERA_BUTTON_Y = 62
+        private const val FACE_CAMERA_SYNC_TIMEOUT_TICKS = 10
+
+        private val EYE_PIXELS = arrayOf(
+            "..######..",
+            ".###@@###.",
+            "##@@@@@@##",
+            "##@@++@@##",
+            "##@@@@@@##",
+            ".###@@###.",
+            "..######.."
+        )
+
+        private val POTION_PIXELS = arrayOf(
+            "..####..",
+            "...##...",
+            "..####..",
+            ".######.",
+            "########",
+            "###++###",
+            "##++++##",
+            "########",
+            ".######."
+        )
 
         private const val DETAILED_BUTTON_LABEL = "D"
         private const val DETAILED_BUTTON_X = 152

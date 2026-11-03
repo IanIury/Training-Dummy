@@ -19,7 +19,10 @@ import net.minecraft.core.component.DataComponents
 import net.minecraft.network.chat.Component
 import net.minecraft.network.syncher.EntityDataAccessor
 import net.minecraft.network.syncher.EntityDataSerializers
+import net.minecraft.network.protocol.game.ClientboundRemoveMobEffectPacket
+import net.minecraft.network.protocol.game.ClientboundUpdateMobEffectPacket
 import net.minecraft.network.syncher.SynchedEntityData
+import net.minecraft.world.effect.MobEffectInstance
 import net.minecraft.server.level.ServerLevel
 import net.minecraft.server.level.ServerPlayer
 import net.minecraft.sounds.SoundEvent
@@ -132,6 +135,14 @@ open class DummyEntity(
         get() = entityData.get(DETAILED_DAMAGE_WINDOW)
         set(value) = entityData.set(DETAILED_DAMAGE_WINDOW, value)
 
+    var effectsWindow: Boolean
+        get() = entityData.get(EFFECTS_WINDOW)
+        set(value) = entityData.set(EFFECTS_WINDOW, value)
+
+    var faceCamera: Boolean
+        get() = entityData.get(FACE_CAMERA)
+        set(value) = entityData.set(FACE_CAMERA, value)
+
     /** Formato geométrico da janela flutuante (sincronizado com o cliente e salvo no NBT). */
     var windowShape: WindowShapeType
         get() = WindowShapeType.byId(entityData.get(WINDOW_SHAPE))
@@ -147,11 +158,11 @@ open class DummyEntity(
 
     var damageStack: ItemStack
         get() = entityData.get(DAMAGE_ITEMSTACK)
-        set(value) = entityData.set(DAMAGE_ITEMSTACK, value)
+        set(value) = entityData.set(DAMAGE_ITEMSTACK, value.copy(), true)
 
     var damageStackOld: ItemStack
         get() = entityData.get(DAMAGE_ITEMSTACK_OLD)
-        set(value) = entityData.set(DAMAGE_ITEMSTACK_OLD, value)
+        set(value) = entityData.set(DAMAGE_ITEMSTACK_OLD, value.copy(), true)
 
     var displayTicks: Int
         get() = entityData.get(DISPLAY_TICKS)
@@ -210,6 +221,8 @@ open class DummyEntity(
         builder.define(DPS_HIT_COUNT, 0)
         builder.define(DPS_HIGHEST_HIT, 0f)
         builder.define(DETAILED_DAMAGE_WINDOW, false)
+        builder.define(EFFECTS_WINDOW, false)
+        builder.define(FACE_CAMERA, false)
         builder.define(WINDOW_SHAPE, WindowShapeType.DEFAULT.ordinal)
     }
 
@@ -230,6 +243,42 @@ open class DummyEntity(
     // ========================================================================
     // DANO E EVENTOS
     // ========================================================================
+
+    override fun onEffectAdded(effect: MobEffectInstance, source: Entity?) {
+        super.onEffectAdded(effect, source)
+        val serverLevel = level() as? ServerLevel ?: return
+        serverLevel.chunkSource.sendToTrackingPlayers(
+            this,
+            ClientboundUpdateMobEffectPacket(this.id, effect, false)
+        )
+    }
+
+    override fun onEffectUpdated(effect: MobEffectInstance, doRefreshAttributes: Boolean, source: Entity?) {
+        super.onEffectUpdated(effect, doRefreshAttributes, source)
+        val serverLevel = level() as? ServerLevel ?: return
+        serverLevel.chunkSource.sendToTrackingPlayers(
+            this,
+            ClientboundUpdateMobEffectPacket(this.id, effect, false)
+        )
+    }
+
+    override fun onEffectsRemoved(effects: MutableCollection<MobEffectInstance>) {
+        super.onEffectsRemoved(effects)
+        val serverLevel = level() as? ServerLevel ?: return
+        for (effect in effects) {
+            serverLevel.chunkSource.sendToTrackingPlayers(
+                this,
+                ClientboundRemoveMobEffectPacket(this.id, effect.effect)
+            )
+        }
+    }
+
+    override fun startSeenByPlayer(player: ServerPlayer) {
+        super.startSeenByPlayer(player)
+        for (effect in activeEffects) {
+            player.connection.send(ClientboundUpdateMobEffectPacket(this.id, effect, false))
+        }
+    }
 
     override fun hurtServer(serverLevel: ServerLevel, source: DamageSource, amount: Float): Boolean {
         if (isInvulnerableTo(serverLevel, source) || level().isClientSide) {
@@ -520,6 +569,9 @@ open class DummyEntity(
         }
 
         if (player is ServerPlayer) {
+            for (effect in activeEffects) {
+                player.connection.send(ClientboundUpdateMobEffectPacket(this.id, effect, false))
+            }
             player.openMenu(
                 SimpleMenuProvider(
                     { containerId, playerInventory, _ ->
@@ -729,6 +781,23 @@ open class DummyEntity(
         dpsHighestHit = 0f
         damageData = DamageData()
         damageDataOld = DamageData()
+        damageStack = ItemStack.EMPTY
+        damageStackOld = ItemStack.EMPTY
+    }
+
+    fun clearAllEffects(): Boolean {
+        val removed = removeAllEffects()
+        if (removed) {
+            level().playSound(
+                null,
+                x, y, z,
+                SoundEvents.GENERIC_DRINK,
+                soundSource,
+                0.8f,
+                1.0f
+            )
+        }
+        return removed
     }
 
     // ========================================================================
@@ -759,6 +828,8 @@ open class DummyEntity(
 
         dummyInventory.serialize(output.child(DUMMY_INVENTORY_TAG))
         output.putBoolean(DETAILED_DAMAGE_WINDOW_TAG, detailedDamageWindow)
+        output.putBoolean(EFFECTS_WINDOW_TAG, effectsWindow)
+        output.putBoolean(FACE_CAMERA_TAG, faceCamera)
         output.putInt(WINDOW_SHAPE_TAG, windowShape.ordinal)
         output.storeNullable(PROFILE_TAG, ResolvableProfile.CODEC, profilePlayer)
     }
@@ -766,6 +837,8 @@ open class DummyEntity(
     override fun readAdditionalSaveData(input: ValueInput) {
         super.readAdditionalSaveData(input)
         detailedDamageWindow = input.getBooleanOr(DETAILED_DAMAGE_WINDOW_TAG, false)
+        effectsWindow = input.getBooleanOr(EFFECTS_WINDOW_TAG, false)
+        faceCamera = input.getBooleanOr(FACE_CAMERA_TAG, false)
         windowShape = WindowShapeType.byId(input.getIntOr(WINDOW_SHAPE_TAG, WindowShapeType.DEFAULT.ordinal))
 
         input.child(DUMMY_INVENTORY_TAG).ifPresent {
@@ -859,6 +932,12 @@ open class DummyEntity(
         val DETAILED_DAMAGE_WINDOW: EntityDataAccessor<Boolean> =
             SynchedEntityData.defineId(DummyEntity::class.java, EntityDataSerializers.BOOLEAN)
 
+        val EFFECTS_WINDOW: EntityDataAccessor<Boolean> =
+            SynchedEntityData.defineId(DummyEntity::class.java, EntityDataSerializers.BOOLEAN)
+
+        val FACE_CAMERA: EntityDataAccessor<Boolean> =
+            SynchedEntityData.defineId(DummyEntity::class.java, EntityDataSerializers.BOOLEAN)
+
         val WINDOW_SHAPE: EntityDataAccessor<Int> =
             SynchedEntityData.defineId(DummyEntity::class.java, EntityDataSerializers.INT)
 
@@ -871,6 +950,8 @@ open class DummyEntity(
         private const val OFF_HAND_INVENTORY_SLOT = 6
         private const val DUMMY_INVENTORY_TAG = "trainingdummy:DummyInventory"
         private const val DETAILED_DAMAGE_WINDOW_TAG = "trainingdummy:DetailedDamageWindow"
+        private const val EFFECTS_WINDOW_TAG = "trainingdummy:EffectsWindow"
+        private const val FACE_CAMERA_TAG = "trainingdummy:FaceCamera"
         private const val WINDOW_SHAPE_TAG = "trainingdummy:WindowShape"
         private const val PROFILE_TAG = "trainingdummy:ProfilePlayer"
 

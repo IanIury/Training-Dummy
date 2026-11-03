@@ -12,6 +12,7 @@ import net.minecraft.client.renderer.state.level.CameraRenderState
 import net.minecraft.core.NonNullList
 import net.minecraft.core.component.DataComponents
 import net.minecraft.network.chat.Component
+import net.minecraft.util.Mth
 import net.minecraft.world.InteractionHand
 import net.minecraft.world.entity.EntitySpawnReason
 import net.minecraft.world.entity.HumanoidArm
@@ -78,6 +79,7 @@ object DisplayDummyClientUtil {
                 }
             }
             fallbackDummy?.also { dummy ->
+                dummy.tickCount = player.tickCount
                 val container = stack.getOrDefault(DataComponents.CONTAINER, ItemContainerContents.EMPTY)
                 val itemsList = NonNullList.withSize(dummy.dummyInventory.slots, ItemStack.EMPTY)
                 container.copyInto(itemsList)
@@ -108,24 +110,48 @@ object DisplayDummyClientUtil {
         val poseStack = event.poseStack
         poseStack.pushPose()
 
-        val isRight = (event.hand == InteractionHand.MAIN_HAND && mc.options.mainHand().get() == HumanoidArm.RIGHT) ||
-            (event.hand == InteractionHand.OFF_HAND && mc.options.mainHand().get() == HumanoidArm.LEFT)
+        val isMainHand = event.hand == InteractionHand.MAIN_HAND
+        val arm = if (isMainHand) player.mainArm else player.mainArm.opposite
+        val isRight = arm == HumanoidArm.RIGHT
         val sideOffset = if (isRight) 1.0f else -1.0f
 
-        // Posiciona a miniatura flutuando logo acima do item DisplayDummy segurado na mão
-        poseStack.translate(sideOffset * 0.42f, -0.32f + event.equipProgress * -0.4f, -0.60f)
+        // 1. Transformação exata do braço em primeira pessoa (ItemInHandRenderer.applyItemArmTransform + swingArm)
+        poseStack.translate(sideOffset * 0.56f, -0.52f + event.equipProgress * -0.6f, -0.72f)
+        val swing = event.swingProgress
+        if (swing > 0.0f) {
+            val f = sin(swing * swing * Math.PI.toFloat())
+            val f1 = sin(Mth.sqrt(swing) * Math.PI.toFloat())
+            val f2 = sin(Mth.sqrt(swing) * (Math.PI.toFloat() * 2.0f))
+            poseStack.translate(sideOffset * (-0.4f * f1), 0.2f * f2, -0.2f * f)
+            poseStack.mulPose(Axis.YP.rotationDegrees(sideOffset * (45.0f + f * -20.0f)))
+            poseStack.mulPose(Axis.ZP.rotationDegrees(sideOffset * f1 * -20.0f))
+            poseStack.mulPose(Axis.XP.rotationDegrees(f1 * -80.0f))
+            poseStack.mulPose(Axis.YP.rotationDegrees(sideOffset * -45.0f))
+        }
 
-        val time = player.tickCount
-        val floatOffset = sin((time + event.partialTick) * 0.1f) * 0.015f
-        poseStack.translate(0.0f, floatOffset, 0.0f)
+        // 2. Transformação firstperson_righthand / firstperson_lefthand do modelo display_dummy.json:
+        // translation = [3, 6, 0] pixels (3/16, 6/16, 0), scale = [0.68, 0.68, 0.68], seguida do offset de modelo (-0.5, -0.5, -0.5)
+        poseStack.translate(sideOffset * (3.0f / 16.0f), 6.0f / 16.0f, 0.0f)
+        poseStack.scale(0.68f, 0.68f, 0.68f)
+        poseStack.translate(-0.5f, -0.5f, -0.5f)
 
-        val scale = 0.16f
-        poseStack.scale(scale, scale, scale)
-        poseStack.mulPose(Axis.YP.rotationDegrees((time + event.partialTick) * 2.5f))
+        // 3. Centraliza exatamente no ponto de pivot [8, 0, 8] do modelo display_dummy (origin = [8, 0, 8] em pixels),
+        // posicionando a base do holograma logo acima da haste/barra superior do projetor (topo em y = 3.8/16)
+        val pivotX = 8.0f / 16.0f
+        val pivotY = 4.1f / 16.0f
+        val pivotZ = 8.0f / 16.0f
+
+        val time = player.tickCount + event.partialTick
+        val floatOffset = sin(time * 0.1f) * 0.02f
+        poseStack.translate(pivotX, pivotY + floatOffset, pivotZ)
+
+        val holoScale = 0.235f
+        poseStack.scale(holoScale, holoScale, holoScale)
+        poseStack.mulPose(Axis.YP.rotationDegrees(time * 2.5f))
 
         val state = renderer.createRenderState()
         renderer.extractRenderState(dummyToRender, state, event.partialTick)
-        state.lightCoords = event.packedLight
+        state.lightCoords = 0xF000F0
         state.isGui = true
         state.nameTag = null
         state.shadowRadius = 0f

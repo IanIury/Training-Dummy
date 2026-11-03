@@ -28,8 +28,8 @@ object ModEvents {
         val damageData = if (event.source.entity is Player) vitima.preDamageData else DamageData()
         vitima.preDamageData = DamageData()
 
-        vitima.damageStackOld = vitima.damageStack
-        vitima.damageStack = event.source.weaponItem ?: ItemStack.EMPTY
+        vitima.damageStackOld = vitima.damageStack.copy()
+        vitima.damageStack = (event.source.weaponItem ?: ItemStack.EMPTY).copy()
 
         val newDamaData = damageData.copy(
             newDamage = event.inflictedDamage,

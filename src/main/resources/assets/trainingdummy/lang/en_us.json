@@ -70,6 +70,7 @@
   "message.trainingdummy.accumulated_value": "%s damage",
   "message.trainingdummy.previous": "Previous",
   "message.trainingdummy.current": "Current",
+  "message.trainingdummy.bare_hands": "Bare hands",
   "message.trainingdummy.comparison.title": "Comparison",
   "message.trainingdummy.comparison.no_weapon": "No weapon",
   "message.trainingdummy.comparison.difference": "Difference: %s",
@@ -114,5 +115,12 @@
   "gui.trainingdummy.rank.your_position": "Your position: #%s (%s)",
   "gui.trainingdummy.rank.unranked": "You are not ranked in this category yet",
   "message.trainingdummy.rank.new_best_dps": "New personal best DPS: %s!",
-  "gui.trainingdummy.window_shape.rounded_rectangle": "Rounded rectangle (Fluid)"
+  "gui.trainingdummy.window_shape.rounded_rectangle": "Rounded rectangle (Fluid)",
+  "gui.trainingdummy.effects_window": "Active effects display: %s",
+  "gui.trainingdummy.effects_window.hint": "Left click: toggle | Right click or Shift+click: clear effects",
+  "message.trainingdummy.effects_title": "Active Effects",
+  "gui.trainingdummy.face_camera": "Window orientation: %s",
+  "gui.trainingdummy.face_camera.camera": "Face Camera",
+  "gui.trainingdummy.face_camera.fixed": "Fixed to Dummy",
+  "gui.trainingdummy.face_camera.hint": "Click to toggle between fixed orientation and facing camera"
 }

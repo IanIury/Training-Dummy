@@ -10,9 +10,12 @@ import net.ian.trainingdummy.item.ModCreativeModelTabs
 import net.ian.trainingdummy.item.ModItems
 import net.ian.trainingdummy.network.ClientboundRanksPayload
 import net.ian.trainingdummy.network.ServerboundChangeModePayload
+import net.ian.trainingdummy.network.ServerboundClearEffectsPayload
 import net.ian.trainingdummy.network.ServerboundDummyManagementActionPayload
 import net.ian.trainingdummy.network.ServerboundRequestRanksPayload
 import net.ian.trainingdummy.network.ServerboundSetDetailedDamageWindowPayload
+import net.ian.trainingdummy.network.ServerboundSetEffectsWindowPayload
+import net.ian.trainingdummy.network.ServerboundSetFaceCameraPayload
 import net.ian.trainingdummy.network.ServerboundSetWindowShapePayload
 import net.ian.trainingdummy.screen.ModMenuTypes
 import net.ian.trainingdummy.server.ServerSetup
@@ -37,18 +40,17 @@ class TrainingDummy(bus: IEventBus, dist: Dist) {
     }
 
     init {
-        LOGGER.log(Level.INFO, "Initializing TrainingDummy mod...")
+        LOGGER.log(Level.INFO, "Mod Initialization")
 
-        ModDataSerializersRegistry.register(bus)
-
-        // Register the DeferredRegisters to the mod-specific event bus
+        // Registros básicos do mod
+        ModCreativeModelTabs.register(bus)
+        ModItems.register(bus)
         ModBlocks.register(bus)
         ModBlockEntities.register(bus)
-        ModItems.register(bus)
         ModEntities.register(bus)
-        ModDataComponents.register(bus)
-        ModCreativeModelTabs.register(bus)
         ModMenuTypes.register(bus)
+        ModDataComponents.register(bus)
+        ModDataSerializersRegistry.register(bus)
 
         bus.addListener(ModEntities::registerAttributes)
         bus.addListener(::onCommonSetup)
@@ -79,6 +81,21 @@ class TrainingDummy(bus: IEventBus, dist: Dist) {
             ServerboundSetDetailedDamageWindowPayload.TYPE,
             ServerboundSetDetailedDamageWindowPayload.STREAM_CODEC,
             ServerboundSetDetailedDamageWindowPayload::handle
+        )
+        registrar.playToServer(
+            ServerboundSetEffectsWindowPayload.TYPE,
+            ServerboundSetEffectsWindowPayload.STREAM_CODEC,
+            ServerboundSetEffectsWindowPayload::handle
+        )
+        registrar.playToServer(
+            ServerboundClearEffectsPayload.TYPE,
+            ServerboundClearEffectsPayload.STREAM_CODEC,
+            ServerboundClearEffectsPayload::handle
+        )
+        registrar.playToServer(
+            ServerboundSetFaceCameraPayload.TYPE,
+            ServerboundSetFaceCameraPayload.STREAM_CODEC,
+            ServerboundSetFaceCameraPayload::handle
         )
         registrar.playToServer(
             ServerboundDummyManagementActionPayload.TYPE,

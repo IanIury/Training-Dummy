@@ -70,6 +70,7 @@
   "message.trainingdummy.accumulated_value": "%s de dano",
   "message.trainingdummy.previous": "Anterior",
   "message.trainingdummy.current": "Atual",
+  "message.trainingdummy.bare_hands": "Mãos vazias",
   "message.trainingdummy.comparison.title": "Comparação",
   "message.trainingdummy.comparison.no_weapon": "Sem arma",
   "message.trainingdummy.comparison.difference": "Diferença: %s",
@@ -114,5 +115,12 @@
   "gui.trainingdummy.rank.your_position": "Sua posição: #%s (%s)",
   "gui.trainingdummy.rank.unranked": "Você ainda não está no ranking desta categoria",
   "message.trainingdummy.rank.new_best_dps": "Novo recorde pessoal de DPS: %s!",
-  "gui.trainingdummy.window_shape.rounded_rectangle": "Retângulo arredondado (Fluido)"
+  "gui.trainingdummy.window_shape.rounded_rectangle": "Retângulo arredondado (Fluido)",
+  "gui.trainingdummy.effects_window": "Exibição de efeitos ativos: %s",
+  "gui.trainingdummy.effects_window.hint": "Clique esquerdo: alternar | Clique direito ou Shift+clique: limpar efeitos",
+  "message.trainingdummy.effects_title": "Efeitos Ativos",
+  "gui.trainingdummy.face_camera": "Orientação da janela: %s",
+  "gui.trainingdummy.face_camera.camera": "Olhar para Câmera",
+  "gui.trainingdummy.face_camera.fixed": "Fixa no Boneco",
+  "gui.trainingdummy.face_camera.hint": "Clique para alternar entre orientação fixa e olhar para a câmera"
 }
